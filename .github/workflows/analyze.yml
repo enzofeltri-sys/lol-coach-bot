@@ -4,7 +4,13 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
 
 jobs:
   analyze:
@@ -24,7 +30,7 @@ jobs:
       - name: Analyser les games
         env:
           RIOT_API_KEY: ${{ secrets.RIOT_API_KEY }}
-        run: python main.py
+        run: python generate_site.py
 
       - name: Enregistrer le rapport
         uses: actions/upload-artifact@v4
@@ -32,10 +38,21 @@ jobs:
           name: rapport-lol
           path: rapport.md
 
-      - name: Mettre à jour le rapport dans le dépôt
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add rapport.md
-          git diff --cached --quiet || git commit -m "Mise à jour du rapport LoL"
-          git push
+      - name: Configurer GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Publier le site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: analyze
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Déployer sur GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
