@@ -17,6 +17,7 @@ def recommended_page(champion_key, role, data):
     if not pages:
         return None
     styles = {str(s['id']): s for s in data['runes']}
+    names = data.get('perk_names', {})
     for page in pages:
         primary = styles.get(str(page.get('primaryPerkStyleId')))
         secondary = styles.get(str(page.get('secondaryPerkStyleId')))
@@ -36,7 +37,9 @@ def recommended_page(champion_key, role, data):
         sub = details(secondary)
         if len(main) != 4 or len(sub) != 2:
             continue
-        return {'primary': primary['name'], 'secondary': secondary['name'], 'primary_icon': 'https://ddragon.leagueoflegends.com/cdn/img/' + primary['icon'], 'secondary_icon': 'https://ddragon.leagueoflegends.com/cdn/img/' + secondary['icon'], 'primary_runes': main, 'secondary_runes': sub, 'shards': 'Identifiants : ' + ' / '.join(str(i) for i in page['perkIds'][6:]), 'source': 'CommunityDragon — champion et rôle ; non spécifique à l’adversaire'}
+        shard_ids = page['perkIds'][6:]
+        shards = ' / '.join(names.get(str(i)) or ('Éclat ' + str(i)) for i in shard_ids)
+        return {'primary': primary['name'], 'secondary': secondary['name'], 'primary_icon': 'https://ddragon.leagueoflegends.com/cdn/img/' + primary['icon'], 'secondary_icon': 'https://ddragon.leagueoflegends.com/cdn/img/' + secondary['icon'], 'primary_runes': main, 'secondary_runes': sub, 'shards': shards, 'source': 'CommunityDragon — champion et rôle ; non spécifique à l’adversaire'}
     raise ValueError('CommunityDragon: no valid page with four primary and two secondary runes for ' + champion_key + '/' + role)
 
 

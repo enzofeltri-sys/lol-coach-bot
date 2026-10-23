@@ -1,4 +1,5 @@
 import json
+from html import escape
 from build_data import fetch_json, DDRAGON_BASE
 from rune_parser import recommended_page
 
@@ -36,14 +37,36 @@ def prepare_duels(games, data):
                     pages[role]['summoners'] = [spells[str(i)] for i in ids]
         fallback = {'primary': 'Indisponible', 'secondary': 'Indisponible', 'primary_runes': [], 'shards': 'Indisponibles', 'source': 'CommunityDragon'}
         builds.append({'key': key, 'champion': champion['name'], 'patch': data['version'], 'pages': pages, 'runes': next(iter(pages.values()))['runes'] if pages else fallback, 'portrait': 'https://ddragon.leagueoflegends.com/cdn/' + data['version'] + '/img/champion/' + champion['image']['full']})
+    covered = [b['champion'] for b in builds if b['pages']]
+    missing = [b['champion'] for b in builds if not b['pages']]
+    pages_count = sum(len(b['pages']) for b in builds)
+    data['diagnostics'] = {'champions': len(builds), 'with_runes': len(covered), 'pages': pages_count, 'missing': missing}
+    print('::notice::Runes CommunityDragon : ' + str(len(covered)) + '/' + str(len(builds)) + ' champions avec au moins une page valide, ' + str(pages_count) + ' combinaisons champion/rôle')
     return builds
 
 
-def attach_duels(html, builds):
+def status_html(data):
+    if not data:
+        return ''
+    def e(value):
+        return escape(str(value), quote=True)
+    rows = ''.join('<li>' + ('✓ ' if s['ok'] else '✗ ') + e(s['name']) + ' — ' + e(s['detail']) + '</li>' for s in data.get('sources', []))
+    info = data.get('diagnostics')
+    coverage = ''
+    if info:
+        coverage = '<p class="hint">Runes : ' + e(info['with_runes']) + ' champions sur ' + e(info['champions']) + ' avec au moins une page valide (' + e(info['pages']) + ' combinaisons champion/rôle).</p>'
+        if info['missing']:
+            shown = ', '.join(info['missing'][:20]) + ('…' if len(info['missing']) > 20 else '')
+            coverage += '<p class="hint">Sans page de runes : ' + e(shown) + '.</p>'
+    return '<details class="section"><summary>État des données</summary><p class="hint">Généré le ' + e(data.get('generated_at', 'inconnu')) + ' · patch ' + e(data.get('version', '?')) + '</p><ul>' + rows + '</ul>' + coverage + '</details>'
+
+
+def attach_duels(html, builds, data=None):
     payload = json.dumps(builds, ensure_ascii=True).replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
-    panel = '''<div id="build" class="tab-panel" role="tabpanel" aria-labelledby="tab-build" hidden>
+    panel = """<div id="build" class="tab-panel" role="tabpanel" aria-labelledby="tab-build" hidden>
 <section class="section panel">
 <h2>Build classique</h2>
+<!--STATUS-->
 <div class="filters"><label for="classic-champion">Champion</label><select id="classic-champion" style="max-width:100%"></select><label for="classic-role">Rôle</label><select id="classic-role"></select></div>
 <div style="display:flex;align-items:center;gap:12px"><img id="classic-portrait" width="64" height="64" alt=""><div><h2 id="classic-title"></h2><p id="classic-patch" class="hint"></p></div></div>
 <section class="section"><h3>Runes de base</h3><p id="classic-rune-status" class="hint"></p><h4 id="classic-primary"></h4><div id="classic-main-runes" class="rune-grid"></div><h4 id="classic-secondary"></h4><div id="classic-sub-runes" class="rune-grid"></div><p id="classic-shards" class="hint"></p></section>
@@ -51,11 +74,11 @@ def attach_duels(html, builds):
 <section class="section"><h3>Objets et compétences</h3><p class="hint">Build d’objets et ordre des compétences indisponibles : aucune source vérifiée n’est encore intégrée. Les anciennes valeurs génériques ont été retirées.</p></section>
 <section class="section"><h3>Adapter au versus</h3><div class="filters"><label for="classic-opponent">Contre qui ?</label><select id="classic-opponent" style="max-width:100%"></select></div><p id="classic-versus-note" class="hint"></p></section>
 </section></div>
-'''
+""".replace('<!--STATUS-->', status_html(data))
     start = html.index('<div id="build"')
     end = html.index('<div id="champions"', start)
     html = html[:start] + panel + html[end:]
-    script = '''<script type="application/json" id="classic-data">PAYLOAD</script>
+    script = """<script type="application/json" id="classic-data">PAYLOAD</script>
 <script>
 (() => {
   const data = JSON.parse(document.getElementById('classic-data').textContent);
@@ -93,7 +116,7 @@ def attach_duels(html, builds):
     el('primary').textContent = runes ? runes.primary : '';
     el('secondary').textContent = runes ? runes.secondary : '';
     cards('main-runes', runes && runes.primary_runes); cards('sub-runes', runes && runes.secondary_runes);
-    el('shards').textContent = runes ? 'Shards — ' + runes.shards : '';
+    el('shards').textContent = runes ? 'Éclats — ' + runes.shards : '';
     el('spells').textContent = page && page.summoners.length ? page.summoners.join(' + ') : 'Recommandation indisponible pour cette sélection.';
     versus();
   };
@@ -102,5 +125,5 @@ def attach_duels(html, builds):
   opponent.addEventListener('change', versus);
   update(true);
 })();
-</script>'''.replace('PAYLOAD', payload)
+</script>""".replace('PAYLOAD', payload)
     return html.replace('</body>', script + '</body>', 1)

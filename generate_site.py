@@ -36,12 +36,12 @@ def main():
     build_data = load_build_data()
     builds = prepare_duels(analysis['games'], build_data)
     analysis['build'] = builds[0] if builds else {}
-    html = attach_duels(build_html(riot_id, analysis), builds)
+    html = attach_duels(build_html(riot_id, analysis), builds, build_data)
     output_path = os.environ.get('OUTPUT_PATH', 'site/index.html')
     os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
     with open(output_path, 'w', encoding='utf-8') as handle:
         handle.write(html)
-    print(json.dumps({'champions': len(builds), 'rune_recommendations_available': bool(build_data['rune_recommendations'])}))
+    print(json.dumps({'champions': len(builds), 'diagnostics': build_data.get('diagnostics'), 'sources': build_data.get('sources')}, ensure_ascii=False))
 
 
 if __name__ == '__main__':
