@@ -115,23 +115,115 @@ def matchup_advice(game, point=None):
 
 
 def progression_plan(games):
+    def split_games(items):
+        cut = max(1, len(items) // 2)
+        return items[:cut], items[cut:]
+
+    def win_rate(sample):
+        return round(100 * sum(bool(g['win']) for g in sample) / len(sample), 1) if sample else None
+
+    def point10(game):
+        return next((p for p in game.get('timeline', []) if p['minute'] == 10), None)
+
+    recent_games, previous_games = split_games(games)
     signals = []
-    point10s = [next((p for p in g.get('timeline', []) if p['minute'] == 10), None) for g in games]
-    early = [(g, p) for g, p in zip(games, point10s) if p and p['gold_gap'] <= -400]
-    if early:
-        signals.append({'key': 'early_gold', 'title': 'Sécuriser les 10 premières minutes', 'count': len(early), 'evidence': f"Retard moyen de {abs(round(mean(p['gold_gap'] for _, p in early))):.0f} or à 10 minutes dans {len(early)} partie(s).", 'exercise': 'Après une mort, une vague perdue ou un recall, retourne d’abord sécuriser une ressource : vague, camp ou ward défensive. Ne cherche pas un trade avant d’avoir une information ou un avantage.', 'metric': 'Écart d’or à 10 minutes', 'current': f"{round(mean(p['gold_gap'] for _, p in early)):+.0f} or", 'target': 'Réduire le retard moyen et avoir moins de parties sous -400 or.', 'severity': abs(mean(p['gold_gap'] for _, p in early))})
-    deadly = [g for g in games if g['deaths_per_10'] >= 5]
-    if deadly:
-        signals.append({'key': 'deaths', 'title': 'Réduire les morts évitables', 'count': len(deadly), 'evidence': f"{len(deadly)} partie(s) avec au moins 5 morts par 10 minutes ; moyenne de {mean(g['deaths_per_10'] for g in deadly):.1f} dans ces parties.", 'exercise': 'Avant chaque engagement, vérifie trois choses : vision, position de tes alliés et sortie possible. Si une condition manque, farm ou contrôle la vision.', 'metric': 'Morts par 10 minutes', 'current': f"{mean(g['deaths_per_10'] for g in deadly):.1f} dans les parties concernées", 'target': 'Faire baisser la moyenne de morts/10 min sur les prochaines parties.', 'severity': mean(g['deaths_per_10'] for g in deadly)})
-    low_kp = [g for g in games if g['role'] != 'UTILITY' and g['kill_participation'] < 45]
-    if low_kp:
-        signals.append({'key': 'participation', 'title': 'Être présent sur les combats utiles', 'count': len(low_kp), 'evidence': f"Participation aux kills sous 45% dans {len(low_kp)} partie(s).", 'exercise': 'Dès que ta vague est poussée, regarde la map et prépare une rotation vers le prochain combat ou objectif.', 'metric': 'Participation aux kills', 'current': f"{mean(g['kill_participation'] for g in low_kp):.1f}%", 'target': 'Augmenter la participation aux kills sans abandonner tes ressources.', 'severity': 45 - mean(g['kill_participation'] for g in low_kp)})
-    low_vision = [g for g in games if (g['role'] == 'UTILITY' and g['vision_per_min'] < 1) or (g['role'] != 'UTILITY' and g['vision_per_min'] < 0.5)]
-    if low_vision:
-        signals.append({'key': 'vision', 'title': 'Mieux contrôler la vision', 'count': len(low_vision), 'evidence': f"Vision faible dans {len(low_vision)} partie(s), selon le rôle.", 'exercise': 'Avant chaque objectif ou déplacement vers une rivière, place une ward sur l’entrée ou la zone de passage.', 'metric': 'Score de vision par minute', 'current': f"{mean(g['vision_per_min'] for g in low_vision):.2f}", 'target': 'Placer une information utile avant les rotations et objectifs.', 'severity': 1 - mean(g['vision_per_min'] for g in low_vision)})
-    low_damage = [g for g in games if g['role'] in {'TOP', 'MIDDLE', 'BOTTOM', 'JUNGLE'} and g['damage_share'] < 18 and g['damage_per_min'] < 500]
-    if low_damage:
-        signals.append({'key': 'damage', 'title': 'Améliorer la contribution en combat', 'count': len(low_damage), 'evidence': f"Moins de 18% des dégâts d’équipe dans {len(low_damage)} partie(s).", 'exercise': 'En combat, reste à portée utile de la cible prioritaire sans être la première personne exposée.', 'metric': 'Part des dégâts d’équipe', 'current': f"{mean(g['damage_share'] for g in low_damage):.1f}%", 'target': 'Augmenter la contribution sans prendre plus de risques inutiles.', 'severity': 18 - mean(g['damage_share'] for g in low_damage)})
+
+    def add_signal(key, title, condition, value_fn, format_fn, base_evidence, exercise, metric, target, severity_fn):
+        affected = [g for g in games if condition(g)]
+        if not affected:
+            return
+        recent = [g for g in recent_games if condition(g)]
+        previous = [g for g in previous_games if condition(g)]
+        current_value = value_fn(affected)
+        recent_value = value_fn(recent) if recent else None
+        previous_value = value_fn(previous) if previous else None
+        evolution = 'Pas assez de parties pour comparer les deux périodes.'
+        if recent_value is not None and previous_value is not None:
+            evolution = f"Évolution récente : {format_fn(previous_value)} → {format_fn(recent_value)} sur les parties concernées."
+        affected_wr = win_rate(affected)
+        others = [g for g in games if not condition(g)]
+        others_wr = win_rate(others)
+        impact = 'Impact non calculable avec l’échantillon actuel.'
+        if affected_wr is not None and others_wr is not None:
+            impact = f"Winrate : {affected_wr}% dans les parties concernées contre {others_wr}% dans les autres."
+        signals.append({
+            'key': key, 'title': title, 'count': len(affected),
+            'evidence': f"{base_evidence} {evolution} {impact}",
+            'exercise': exercise, 'metric': metric,
+            'current': format_fn(recent_value if recent_value is not None else current_value),
+            'target': target, 'severity': severity_fn(affected),
+        })
+
+    def early_condition(g):
+        point = point10(g)
+        return bool(point and point['gold_gap'] <= -400)
+
+    def early_value(sample):
+        points = [point10(g) for g in sample if point10(g)]
+        return mean(p['gold_gap'] for p in points) if points else None
+
+    add_signal(
+        'early_gold', 'Sécuriser les 10 premières minutes', early_condition, early_value,
+        lambda value: f"{value:+.0f} or à 10 min",
+        lambda affected: f"Retard moyen de {abs(round(mean(point10(g)['gold_gap'] for g in affected if point10(g)))):.0f} or à 10 minutes dans {len(affected)} partie(s).",
+        'Après une mort, une vague perdue ou un recall, retourne d’abord sécuriser une ressource : vague, camp ou ward défensive. Ne cherche pas un trade avant d’avoir une information ou un avantage.',
+        'Écart d’or à 10 minutes',
+        'Réduire le retard moyen et avoir moins de parties sous -400 or.',
+        lambda affected: abs(mean(point10(g)['gold_gap'] for g in affected if point10(g))),
+    )
+
+    add_signal(
+        'deaths', 'Réduire les morts évitables',
+        lambda g: g['deaths_per_10'] >= 5,
+        lambda sample: mean(g['deaths_per_10'] for g in sample),
+        lambda value: f"{value:.1f} morts/10 min",
+        lambda affected: f"{len(affected)} partie(s) avec au moins 5 morts par 10 minutes ; moyenne de {mean(g['deaths_per_10'] for g in affected):.1f} dans ces parties.",
+        'Avant chaque engagement, vérifie trois choses : vision, position de tes alliés et sortie possible. Si une condition manque, farm ou contrôle la vision.',
+        'Morts par 10 minutes',
+        'Faire baisser la moyenne de morts/10 min sur les prochaines parties.',
+        lambda affected: mean(g['deaths_per_10'] for g in affected),
+    )
+
+    add_signal(
+        'participation', 'Être présent sur les combats utiles',
+        lambda g: g['role'] != 'UTILITY' and g['kill_participation'] < 45,
+        lambda sample: mean(g['kill_participation'] for g in sample),
+        lambda value: f"{value:.1f}% de participation",
+        lambda affected: f"Participation aux kills sous 45% dans {len(affected)} partie(s).",
+        'Dès que ta vague est poussée, regarde la map et prépare une rotation vers le prochain combat ou objectif.',
+        'Participation aux kills',
+        'Augmenter la participation aux kills sans abandonner tes ressources.',
+        lambda affected: 45 - mean(g['kill_participation'] for g in affected),
+    )
+
+    def vision_condition(g):
+        return (g['role'] == 'UTILITY' and g['vision_per_min'] < 1) or (g['role'] != 'UTILITY' and g['vision_per_min'] < 0.5)
+
+    add_signal(
+        'vision', 'Mieux contrôler la vision', vision_condition,
+        lambda sample: mean(g['vision_per_min'] for g in sample),
+        lambda value: f"{value:.2f} vision/min",
+        lambda affected: f"Vision faible dans {len(affected)} partie(s), selon le rôle.",
+        'Avant chaque objectif ou déplacement vers une rivière, place une ward sur l’entrée ou la zone de passage.',
+        'Score de vision par minute',
+        'Placer une information utile avant les rotations et objectifs.',
+        lambda affected: 1 - mean(g['vision_per_min'] for g in affected),
+    )
+
+    def damage_condition(g):
+        return g['role'] in {'TOP', 'MIDDLE', 'BOTTOM', 'JUNGLE'} and g['damage_share'] < 18 and g['damage_per_min'] < 500
+
+    add_signal(
+        'damage', 'Améliorer la contribution en combat', damage_condition,
+        lambda sample: mean(g['damage_share'] for g in sample),
+        lambda value: f"{value:.1f}% des dégâts d’équipe",
+        lambda affected: f"Moins de 18% des dégâts d’équipe dans {len(affected)} partie(s).",
+        'En combat, reste à portée utile de la cible prioritaire sans être la première personne exposée.',
+        'Part des dégâts d’équipe',
+        'Augmenter la contribution sans prendre plus de risques inutiles.',
+        lambda affected: 18 - mean(g['damage_share'] for g in affected),
+    )
+
     if not signals:
         return {'priority': 'Continuer la progression', 'why': 'Aucun signal récurrent suffisamment fort dans les données actuelles.', 'evidence': 'Les indicateurs disponibles ne montrent pas de schéma dominant.', 'exercise': ROLE_ADVICE.get(games[0]['role'], ROLE_ADVICE['UNKNOWN']), 'metric': 'À définir après davantage de parties', 'current': '—', 'target': 'Jouer quelques parties supplémentaires pour identifier un schéma.', 'affected_games': 0, 'secondary': []}
     signals.sort(key=lambda s: (-s['count'], -s['severity']))
