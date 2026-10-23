@@ -4,6 +4,7 @@ import urllib.request
 DDRAGON_VERSIONS = 'https://ddragon.leagueoflegends.com/api/versions.json'
 DDRAGON_BASE = 'https://ddragon.leagueoflegends.com/cdn/{version}/data/fr_FR'
 CDRAGON_BASE = 'https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1'
+RUNE_RECOMMENDATIONS = f'{CDRAGON_BASE}/champion-rune-recommendations.json'
 
 
 def fetch_json(url):
@@ -16,7 +17,21 @@ def load_build_data():
     champions = fetch_json(f'{DDRAGON_BASE.format(version=version)}/champion.json')['data']
     items = fetch_json(f'{DDRAGON_BASE.format(version=version)}/item.json')['data']
     runes = fetch_json(f'{DDRAGON_BASE.format(version=version)}/runesReforged.json')
-    return {'version': version, 'champions': champions, 'items': items, 'runes': runes}
+    rune_recommendations = fetch_json(RUNE_RECOMMENDATIONS)
+    return {'version': version, 'champions': champions, 'items': items, 'runes': runes, 'rune_recommendations': rune_recommendations}
+
+
+def recommended_runes(champion_key, data):
+    recommendations = data.get('rune_recommendations', {})
+    entry = recommendations.get(champion_key) or recommendations.get(champion_key.lower())
+    if not entry:
+        return {'primary': 'Recommandation indisponible', 'secondary': 'Recommandation indisponible', 'shards': 'Adaptation / Adaptation / Défense', 'source': 'CommunityDragon'}
+    pages = entry if isinstance(entry, list) else entry.get('recommendations', entry.get('runes', []))
+    first = pages[0] if pages else {}
+    primary = first.get('primaryStyleName') or first.get('primaryStyle') or 'Recommandation indisponible'
+    secondary = first.get('subStyleName') or first.get('subStyle') or 'Recommandation indisponible'
+    shards = ' / '.join(str(shard) for shard in first.get('statShards', [])) or 'Adaptation / Adaptation / Défense'
+    return {'primary': primary, 'secondary': secondary, 'shards': shards, 'source': 'CommunityDragon'}
 
 
 def champion_build(champion_key, role, opponent_key, data):
@@ -29,12 +44,13 @@ def champion_build(champion_key, role, opponent_key, data):
     opponent_tags = opponent.get('tags', [])
     is_magic = 'Mage' in opponent_tags
     is_physical = 'Fighter' in opponent_tags or 'Marksman' in opponent_tags or 'Assassin' in opponent_tags
+    runes = recommended_runes(champion_key, data)
     return {
         'champion': champion['name'],
         'opponent': opponent['name'],
         'role': role,
         'patch': data['version'],
-        'runes': {'primary': 'Adaptation selon le matchup', 'secondary': 'Adaptation selon le matchup', 'shards': 'Adaptation / Adaptation / Défense', 'source': 'CommunityDragon'},
+        'runes': runes,
         'summoners': ['Flash', 'Téléport' if role in {'TOP', 'MIDDLE'} else 'Soin' if role == 'BOTTOM' else 'Ignite'],
         'skill_order': 'Q > E > W, R aux niveaux 6, 11 et 16',
         'starting_items': ['Potion de santé', 'Ward furtive'],
