@@ -3,39 +3,13 @@ from collections import defaultdict
 
 TIMELINE_MINUTES = (5, 10, 15, 20)
 
-CHAMPION_ADVICE = {
-    'Ahri': ['Utilise ton E pour créer une ouverture, puis enchaîne Q et W seulement si la cible est isolée.', 'Garde un flash ou une sortie après ton ultime.'],
-    'Yasuo': ['Stack ton passif avant un trade et évite E dans une vague sans sortie.', 'Cherche un mur pour ton ultime, mais n’engage pas sans vision ou suivi.'],
-    'Jinx': ['Reste derrière ta ligne et utilise les rockets pour piquer sans t’exposer.', 'Garde ton ultime pour les combats, fuites ou objectifs.'],
-    'Ezreal': ['Poke avec Q hors de portée et utilise E pour fuir plutôt que pour agresser.', 'Garde ton ultime pour combats, objectifs ou une vague difficile.'],
-    'Thresh': ['Avance avec ton allié avant de chercher un hook.', 'Garde la lanterne pour sauver un allié ou traverser un mur.'],
-    'Amumu': ['Cherche un engage sur plusieurs ennemis groupés.', 'Communique tes timings d’ultime autour des objectifs.'],
-    'Darius': ['Stack ton passif avant d’utiliser ton ultime.', 'Contrôle l’espace avec E et évite de poursuivre sans vision.'],
-    'Malphite': ['Garde R pour engager plusieurs ennemis ou répondre au carry adverse.', 'Adapte tes résistances au type de dégâts adverse.'],
-}
-
 ROLE_ADVICE = {
-    'TOP': ['Ne push pas sans vision et sans savoir où est le jungler adverse.', 'Utilise Téléport pour un combat d’objectif, pas pour revenir sans valeur.'],
-    'MIDDLE': ['Push puis bouge vers un côté plutôt que de rester au milieu.', 'Garde une sortie avant d’engager.'],
-    'JUNGLE': ['Planifie ta route autour du prochain objectif.', 'Ne conteste un objectif que si la vision ou la condition de combat est favorable.'],
-    'BOTTOM': ['Respecte la portée de ton support et de l’adversaire avant un trade.', 'Vérifie jungler adverse et summons avant un engage.'],
-    'UTILITY': ['Ward les entrées et objectifs avant qu’ils apparaissent.', 'Accompagne ton carry, mais pas dans une position sans vision.'],
-    'UNKNOWN': ['Choisis une priorité simple : vision, vague ou positionnement.', 'Après chaque mort, identifie la cause principale.'],
-}
-
-MATCHUP_ADVICE = {
-    ('ahri', 'zed'): ['Garde ton E pour éviter ou répondre au W de Zed, plutôt que de le lancer au hasard.', 'Ne reste pas à portée de son W : échange à distance puis recule.'],
-    ('ahri', 'yasuo'): ['Évite de te placer derrière les minions : son E peut te rapprocher rapidement.', 'Garde ton E pour le windwall ou pour créer une distance après son engage.'],
-    ('zed', 'ahri'): ['Utilise W pour bait son E, puis engage seulement après qu’il a été utilisé.', 'Ne poursuis pas dans le brouillard : Ahri peut reprendre une distance avec son R.'],
-    ('yasuo', 'ahri'): ['Utilise le windwall pour bloquer Q ou E, puis cherche un trade court.', 'Ne dash pas à travers les minions si son E est disponible.'],
-    ('jinx', 'ezreal'): ['Respecte sa portée de Q et ne trade pas sans avantage de minions ou de support.', 'Garde ton accès de recul pour son E : s’il l’utilise pour agresser, tu peux punir.'],
-    ('ezreal', 'jinx'): ['Poke avec Q hors de sa portée et évite les échanges longs.', 'Utilise E pour esquiver un engage, pas pour avancer sans vision.'],
-    ('thresh', 'leona'): ['Garde ta lanterne pour annuler un engage ou sauver ton ADC.', 'Ne hook pas sans que ton ADC puisse suivre : Leona peut encaisser et engager.'],
-    ('leona', 'thresh'): ['Engage après que la lanterne ou le hook a été utilisé.', 'Utilise ton R pour couper la retraite plutôt que d’engager un duel isolé.'],
-    ('darius', 'garen'): ['Stack ton passif avec les Q extérieurs avant d’utiliser ton ultime.', 'Évite les longs échanges si son passif est actif : recule puis reviens.'],
-    ('garen', 'darius'): ['Ne reste pas dans son E prolongé : entre, trade, puis sors.', 'Garde ton Q pour supprimer un ralentissement ou terminer une fuite.'],
-    ('malphite', 'darius'): ['Joue avec la distance : laisse-le push puis farme près de ta tour.', 'Garde ton R pour un gank ou pour répondre à son engage.'],
-    ('amumu', 'jarvan iv'): ['Ne Q pas sans être sûr de toucher : son E-Q peut te suivre ou te punir.', 'Garde ton R pour un contre-engage quand son équipe est groupée.'],
+    'TOP': 'Sur la top lane, privilégie une vague sûre et une sortie avant chaque rotation.',
+    'MIDDLE': 'Au mid, transforme l’avantage de vague en pression sur un côté plutôt qu’en attente au centre.',
+    'JUNGLE': 'Au jungle, planifie la route autour du prochain objectif et évite les contestations sans information.',
+    'BOTTOM': 'À l’ADC, trade uniquement lorsque la position du support et la vague te donnent un avantage.',
+    'UTILITY': 'En support, place la vision avant les rotations et accompagne le carry sans t’exposer sans sortie.',
+    'UNKNOWN': 'Choisis une priorité simple : vision, vague ou positionnement.',
 }
 
 
@@ -93,22 +67,51 @@ def timeline_points(timeline, player, opponent):
     return points
 
 
-def champion_advice(champion, role):
-    key = next((name for name in CHAMPION_ADVICE if name.lower() == str(champion).lower()), None)
-    return CHAMPION_ADVICE.get(key, ROLE_ADVICE.get(role, ROLE_ADVICE['UNKNOWN']))
+def personalized_advice(game, point=None):
+    advice = []
+    role = game['role']
+    if point:
+        gold_gap, xp_gap, cs_gap = point['gold_gap'], point['xp_gap'], point['cs_gap']
+        if gold_gap <= -400:
+            advice.append(f"À 10 minutes, tu avais {abs(gold_gap)} or de retard sur {game.get('opponent_champion') or 'ton vis-à-vis'}. Revois les 10 premières minutes et identifie la première vague, mort ou rotation qui a fait basculer l’écart.")
+        elif gold_gap >= 400:
+            advice.append(f"À 10 minutes, tu menais de {gold_gap} or. Cherche comment convertir cet avantage : pression sur un objectif, accompagnement d’un allié ou contrôle de vision avant de retourner farm.")
+        if role != 'UTILITY' and cs_gap <= -20:
+            advice.append(f"Tu avais {abs(cs_gap)} CS de retard à 10 minutes. Repère une vague précise perdue : positionnement, recall trop tardif, rotation ou temps mort après un combat.")
+        if xp_gap <= -500:
+            advice.append(f"Ton retard d’expérience était de {abs(xp_gap)} XP à 10 minutes. Revois les moments où tu n’étais pas sur une voie ou un camp exploitable, surtout après une mort ou une rotation.")
+    if game['deaths_per_10'] >= 5:
+        advice.append(f"Tu es mort {game['deaths']} fois, soit {game['deaths_per_10']} morts/10 min. Pour la prochaine partie, choisis une règle simple : ne engage pas sans vision, sans avantage de vague ou sans savoir où sont deux ennemis.")
+    if game['kill_participation'] < 45 and role != 'UTILITY':
+        advice.append(f"Ta participation aux kills était de {game['kill_participation']}%. Repère un combat ou un objectif où tu étais trop loin : anticipe la rotation dès que la vague est poussée.")
+    if role == 'UTILITY' and game['vision_per_min'] < 1:
+        advice.append(f"Ton score de vision était de {game['vision_per_min']} par minute. Avant chaque objectif, place une ward sur l’entrée ou la rivière plutôt qu’au dernier moment.")
+    elif role != 'UTILITY' and game['vision_per_min'] < 0.5:
+        advice.append(f"Ton score de vision était de {game['vision_per_min']} par minute. Ajoute une ward défensive avant de pusher ou de t’éloigner de ta tour.")
+    if role in {'TOP', 'MIDDLE', 'BOTTOM', 'JUNGLE'} and game['damage_share'] < 18 and game['damage_per_min'] < 500:
+        advice.append(f"Tu as infligé seulement {game['damage_share']}% des dégâts de ton équipe. Revois ton positionnement en combat : reste à portée utile sans être la première cible.")
+    if game['damage_taken_per_min'] > game['damage_per_min'] * 1.5 and game['damage_taken_per_min'] > 700:
+        advice.append(f"Tu as subi beaucoup plus de dégâts que tu en as infligé ({game['damage_taken_per_min']} contre {game['damage_per_min']} par minute). Revois les engagements où tu es entré le premier sans sortie ni suivi.")
+    if not advice:
+        advice.append(f"Aucun signal majeur dans les repères disponibles. Continue à prioriser : {ROLE_ADVICE.get(role, ROLE_ADVICE['UNKNOWN'])}")
+    return advice[:4]
 
 
-def matchup_advice(champion, opponent, role):
+def matchup_advice(game, point=None):
+    opponent = game.get('opponent_champion')
     if not opponent:
         return ['Adversaire indisponible : concentre-toi sur le contrôle de vague, la vision et le positionnement.']
-    pair = tuple(sorted([str(champion).lower(), str(opponent).lower()]))
-    if pair in MATCHUP_ADVICE:
-        return MATCHUP_ADVICE[pair]
-    return [
-        f'Identifie la compétence clé de {opponent} : attends qu’elle soit utilisée avant un trade.',
-        f'Adapte ta position à la portée de {opponent} et garde une sortie près des minions ou d’un mur.',
-        ROLE_ADVICE.get(role, ROLE_ADVICE['UNKNOWN'])[0],
-    ]
+    advice = []
+    if point:
+        if point['gold_gap'] < 0:
+            advice.append(f"Contre {opponent}, tu étais en retard de {abs(point['gold_gap'])} or à {point['minute']} minutes. Ne cherche pas un trade tant que tu n’as pas récupéré une vague, une ward défensive ou un avantage de position.")
+        else:
+            advice.append(f"Contre {opponent}, tu menais de {point['gold_gap']} or à {point['minute']} minutes. Utilise cet avantage pour contrôler la rivière ou accompagner un objectif, sans t’exposer seul.")
+        if point['cs_gap'] < -10 and game['role'] != 'UTILITY':
+            advice.append(f"Tu avais {abs(point['cs_gap'])} CS de retard contre {opponent}. Revois la vague juste avant ton premier désavantage : position, recall ou temps passé hors de la voie.")
+    advice.append(f"Contre {opponent}, identifie sa compétence clé et garde une sortie pour répondre à son engagement.")
+    advice.append(ROLE_ADVICE.get(game['role'], ROLE_ADVICE['UNKNOWN']))
+    return advice[:4]
 
 
 def analyze_match(match, puuid):
@@ -123,8 +126,7 @@ def analyze_match(match, puuid):
         'match_id': match['metadata']['matchId'], 'patch': match['info'].get('gameVersion', 'inconnu'),
         'queue': match['info'].get('queueId'), 'mode': match['info'].get('gameMode', 'inconnu'),
         'opponent_champion': opponent_champion, 'objectives': team_objectives(match, player), 'timeline': [],
-        'advice': champion_advice(data['champion'], data['role']),
-        'matchup_advice': matchup_advice(data['champion'], opponent_champion, data['role']),
+        'advice': [], 'matchup_advice': [],
     })
     return data
 
@@ -142,7 +144,7 @@ def role_aggregates(games):
     groups = defaultdict(list)
     for game in games:
         groups[game['role']].append(game)
-    return {role: {'games': len(s), 'wins': sum(bool(g['win']) for g in s), 'win_rate': round(100 * sum(bool(g['win']) for g in s) / len(s), 1), 'avg_kda': round(mean(g['kda'] for g in s), 2), 'avg_deaths_per_10': round(mean(g['deaths_per_10'] for g in s), 2), 'avg_cs_per_min': round(mean(g['cs_per_min'] for g in s), 2), 'avg_damage_per_min': round(mean(g['damage_per_min'] for g in s), 2), 'avg_vision_per_min': round(mean(g['vision_per_min'] for g in s), 2), 'avg_kill_participation': round(mean(g['kill_participation'] for g in s), 1)} for role, s in groups.items()}
+    return {role: {'games': len(s), 'win_rate': round(100 * sum(bool(g['win']) for g in s) / len(s), 1), 'avg_kda': round(mean(g['kda'] for g in s), 2), 'avg_deaths_per_10': round(mean(g['deaths_per_10'] for g in s), 2), 'avg_cs_per_min': round(mean(g['cs_per_min'] for g in s), 2), 'avg_damage_per_min': round(mean(g['damage_per_min'] for g in s), 2), 'avg_vision_per_min': round(mean(g['vision_per_min'] for g in s), 2), 'avg_kill_participation': round(mean(g['kill_participation'] for g in s), 1)} for role, s in groups.items()}
 
 
 def champion_aggregates(games):
@@ -152,7 +154,7 @@ def champion_aggregates(games):
     result = {}
     for champion, sample in groups.items():
         role = max((g['role'] for g in sample), key=lambda r: sum(g['role'] == r for g in sample))
-        result[champion] = {'games': len(sample), 'wins': sum(bool(g['win']) for g in sample), 'win_rate': round(100 * sum(bool(g['win']) for g in sample) / len(sample), 1), 'role': role, 'avg_kda': round(mean(g['kda'] for g in sample), 2), 'avg_deaths_per_10': round(mean(g['deaths_per_10'] for g in sample), 2), 'avg_damage_per_min': round(mean(g['damage_per_min'] for g in sample), 2), 'avg_vision_per_min': round(mean(g['vision_per_min'] for g in sample), 2), 'advice': champion_advice(champion, role)}
+        result[champion] = {'games': len(sample), 'win_rate': round(100 * sum(bool(g['win']) for g in sample) / len(sample), 1), 'role': role, 'avg_kda': round(mean(g['kda'] for g in sample), 2), 'avg_deaths_per_10': round(mean(g['deaths_per_10'] for g in sample), 2), 'avg_damage_per_min': round(mean(g['damage_per_min'] for g in sample), 2), 'avg_vision_per_min': round(mean(g['vision_per_min'] for g in sample), 2), 'advice': personalized_advice(sample[0], next((p for p in sample[0].get('timeline', []) if p['minute'] == 10), None))}
     return dict(sorted(result.items(), key=lambda item: -item[1]['games']))
 
 
@@ -163,7 +165,9 @@ def matchup_aggregates(games):
             groups[(game['champion'], game['opponent_champion'])].append(game)
     result = {}
     for (champion, opponent), sample in groups.items():
-        result[f'{champion} vs {opponent}'] = {'games': len(sample), 'wins': sum(bool(g['win']) for g in sample), 'win_rate': round(100 * sum(bool(g['win']) for g in sample) / len(sample), 1), 'role': sample[0]['role'], 'avg_gold_gap_10': None, 'advice': matchup_advice(champion, opponent, sample[0]['role'])}
+        point = next((p for p in sample[0].get('timeline', []) if p['minute'] == 10), None)
+        win_rate = round(100 * sum(bool(g['win']) for g in sample) / len(sample), 1)
+        result[f'{champion} vs {opponent}'] = {'games': len(sample), 'win_rate': win_rate, 'role': sample[0]['role'], 'champion': champion, 'opponent': opponent, 'performance': 'good' if win_rate >= 50 else 'bad', 'avg_gold_gap_10': point['gold_gap'] if point else None, 'advice': matchup_advice(sample[0], point)}
     return dict(sorted(result.items(), key=lambda item: -item[1]['games']))
 
 
@@ -184,9 +188,14 @@ def analyze_matches(matches, puuid, timelines=None, timeline_errors=None):
         opponent = find_opponent(match, player)
         if opponent:
             game['timeline'] = timeline_points(timeline, player, opponent)
-            point = next((p for p in game['timeline'] if p['minute'] == 10), None)
-            if point:
-                timeline_insights.append(f"{match_id[-8:]} · {game['champion']} vs {game.get('opponent_champion') or 'adversaire'} à 10 min | Or {point['gold_gap']:+d} · XP {point['xp_gap']:+d} · CS {point['cs_gap']:+d}.")
+            point10 = next((p for p in game['timeline'] if p['minute'] == 10), None)
+            game['advice'] = personalized_advice(game, point10)
+            game['matchup_advice'] = matchup_advice(game, point10)
+            if point10:
+                timeline_insights.append(f"{match_id[-8:]} · {game['champion']} vs {game.get('opponent_champion') or 'adversaire'} à 10 min | Or {point10['gold_gap']:+d} · XP {point10['xp_gap']:+d} · CS {point10['cs_gap']:+d}. {game['advice'][0]}")
+        else:
+            game['advice'] = personalized_advice(game)
+            game['matchup_advice'] = matchup_advice(game)
     groups = defaultdict(list)
     for g in games:
         if g['duration_min'] >= 10:
@@ -194,15 +203,22 @@ def analyze_matches(matches, puuid, timelines=None, timeline_errors=None):
     issues, strengths = [], []
     for role, sample in sorted(groups.items(), key=lambda item: -len(item[1])):
         n = len(sample)
-        prefix = f'{role} — {n} partie(s)'
         if n < 3:
-            issues.append(f'{prefix} : échantillon trop petit pour proposer une tendance.')
+            issues.append(f'{role} — {n} partie(s) : échantillon trop petit pour une tendance.')
             continue
-        issues.append(f"{prefix} | {mean(g['deaths_per_10'] for g in sample):.1f} morts/10 min · {mean(g['damage_per_min'] for g in sample):.0f} dégâts/min · {mean(g['vision_per_min'] for g in sample):.1f} vision/min · {mean(g['kill_participation'] for g in sample):.0f}% KP.")
+        deaths = mean(g['deaths_per_10'] for g in sample)
+        damage = mean(g['damage_per_min'] for g in sample)
+        vision = mean(g['vision_per_min'] for g in sample)
+        kp = mean(g['kill_participation'] for g in sample)
+        issues.append(f"{role} — {n} partie(s) | {deaths:.1f} morts/10 min · {damage:.0f} dégâts/min · {vision:.1f} vision/min · {kp:.0f}% KP. Priorité : revoir les moments où tu perds l’initiative.")
         wins = sum(g['win'] for g in sample)
-        strengths.append(f'{prefix} : {wins} victoire(s), {n-wins} défaite(s).')
+        strengths.append(f"{role} — {n} partie(s) : {wins} victoire(s), {n-wins} défaite(s). Résultat descriptif uniquement.")
     if not timeline_insights:
         timeline_insights = ['Timelines indisponibles : ' + ' ; '.join(timeline_errors)] if timeline_errors else ['Aucun repère timeline exploitable.']
+    matchup_filters = {
+        'roles': sorted({g['role'] for g in games}),
+        'champions': sorted({g['champion'] for g in games}),
+    }
     return dict(
         games=games,
         avg_deaths=round(mean(g['deaths'] for g in games), 2), avg_deaths_per_10=round(mean(g['deaths_per_10'] for g in games), 2),
@@ -215,6 +231,7 @@ def analyze_matches(matches, puuid, timelines=None, timeline_errors=None):
         total_barons=sum(g['objectives']['barons'] for g in games), total_heralds=sum(g['objectives']['heralds'] for g in games),
         timeline_gaps=timeline_gap_averages(games), role_aggregates=role_aggregates(games),
         champion_aggregates=champion_aggregates(games), matchup_aggregates=matchup_aggregates(games),
+        matchup_filters=matchup_filters,
         win_rate=round(100 * sum(g['win'] for g in games) / len(games)), issues=issues, strengths=strengths,
         timeline_insights=timeline_insights, timeline_errors=timeline_errors,
     )
