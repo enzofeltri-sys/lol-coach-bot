@@ -44,23 +44,26 @@ def rune_details(style_name, rune_ids, data):
     return []
 
 
-def find_rune_entry(recommendations, champion_key):
-    key = str(champion_key).lower()
+def find_rune_entry(recommendations, champion_keys):
+    keys = {str(key).lower() for key in champion_keys if key}
     if isinstance(recommendations, dict):
-        return recommendations.get(champion_key) or recommendations.get(key)
+        for key in keys:
+            if key in recommendations:
+                return recommendations[key]
+        return None
     if isinstance(recommendations, list):
         for item in recommendations:
             if not isinstance(item, dict):
                 continue
-            values = [str(item.get(field, '')).lower() for field in ('championKey', 'champion', 'championId', 'key', 'name', 'id')]
-            if key in values:
+            values = {str(item.get(field, '')).lower() for field in ('championKey', 'champion', 'championId', 'key', 'name', 'id')}
+            if keys & values:
                 return item
     return None
 
 
-def recommended_runes(champion_key, data):
+def recommended_runes(champion_key, numeric_key, data):
     recommendations = data.get('rune_recommendations', [])
-    entry = find_rune_entry(recommendations, champion_key)
+    entry = find_rune_entry(recommendations, [champion_key, numeric_key])
     if not entry:
         return {'primary': 'Recommandation indisponible', 'secondary': 'Recommandation indisponible', 'shards': 'Adaptation / Adaptation / Défense', 'primary_icon': '', 'secondary_icon': '', 'primary_runes': [], 'source': 'CommunityDragon'}
     if isinstance(entry, list):
@@ -87,7 +90,8 @@ def champion_build(champion_key, role, opponent_key, data):
     opponent_tags = opponent.get('tags', [])
     is_magic = 'Mage' in opponent_tags
     is_physical = 'Fighter' in opponent_tags or 'Marksman' in opponent_tags or 'Assassin' in opponent_tags
-    runes = recommended_runes(champion_key, data)
+    numeric_key = champion.get('key')
+    runes = recommended_runes(champion_key, numeric_key, data)
     return {
         'champion': champion['name'],
         'opponent': opponent['name'],
