@@ -1,10 +1,22 @@
+import importlib.util
 import json
 import os
 
 from analysis import analyze_matches
 from build_data import champion_build, load_build_data
 from riot_api import get_puuid, get_ranked_match_ids, get_match, get_timeline
-from site import build_html
+
+
+def load_local_site_module():
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'site.py')
+    spec = importlib.util.spec_from_file_location('lol_site', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+site_module = load_local_site_module()
+build_html = site_module.build_html
 
 
 def main():
