@@ -1,44 +1,39 @@
+import json
 import os
-import importlib.util
-from pathlib import Path
 
-from riot_api import get_puuid, get_ranked_match_ids, get_match, get_timeline
 from analysis import analyze_matches
-from report import build_report
-
-spec = importlib.util.spec_from_file_location('lol_site_renderer', Path(__file__).with_name('site.py'))
-renderer = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(renderer)
-
-RIOT_ID = 'Kyoraku#1707'
-GAME_NAME, TAG_LINE = RIOT_ID.split('#')
-MATCH_COUNT = 20
+from build_data import champion_build, load_build_data
+from riot_api import fetch_recent_matches, fetch_match_details, fetch_match_timeline
+from site import build_html
 
 
 def main():
-    print(f'Analyse des {MATCH_COUNT} dernières games de {RIOT_ID}...')
-    puuid = get_puuid(GAME_NAME, TAG_LINE)
-    match_ids = get_ranked_match_ids(puuid, count=MATCH_COUNT)
-    if not match_ids:
-        raise RuntimeError('Aucune ranked récente trouvée.')
-    matches = [get_match(match_id) for match_id in match_ids]
+    riot_id = os.environ['RIOT_ID']
+    game_name, tag_line = riot_id.split('#')
+    puuid = fetch_puuid(game_name, tag_line)
+    match_ids = fetch_recent_matches(puuid, count=20)
+    matches = [fetch_match_details(match_id) for match_id in match_ids]
     timelines = {}
     timeline_errors = []
-    for match in matches:
-        match_id = match['metadata']['matchId']
+    for match_id in match_ids:
         try:
-            timelines[match_id] = get_timeline(match_id)
+            timelines[match_id] = fetch_match_timeline(match_id)
         except Exception as error:
-            response = getattr(error, 'response', None)
-            status = getattr(response, 'status_code', None)
-            message = f'{match_id} : {type(error).__name__}' + (f' (HTTP {status})' if status else '')
-            timeline_errors.append(message)
-            print(f'Timeline indisponible : {message}')
+            timeline_errors.append(f'{match_id}: {error}')
     analysis = analyze_matches(matches, puuid, timelines, timeline_errors)
-    os.makedirs('site', exist_ok=True)
-    Path('rapport.md').write_text(build_report(RIOT_ID, analysis), encoding='utf-8')
-    Path('site/index.html').write_text(renderer.build_html(RIOT_ID, analysis), encoding='utf-8')
-    print('Rapport et site générés.')
+    build_data = load_build_data()
+    first_game = analysis['games'][0]
+    analysis['build'] = champion_build(first_game['champion'], first_game['role'], build_data)
+    html = build_html(riot_id, analysis)
+    output_path = os.environ.get('OUTPUT_PATH', 'index.html')
+    with open(output_path, 'w', encoding='utf-8') as handle:
+        handle.write(html)
+    print(json.dumps({'riot_id': riot_id, 'games': len(matches), 'output': output_path}))
+
+
+def fetch_puuid(game_name, tag_line):
+    from riot_api import fetch_account
+    return fetch_account(game_name, tag_line)['puuid']
 
 
 if __name__ == '__main__':
