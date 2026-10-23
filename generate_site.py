@@ -4,7 +4,7 @@ import os
 
 from analysis import analyze_matches
 from build_data import load_build_data
-from rune_parser import champion_build
+from duel_ui import prepare_duels, attach_duels
 from riot_api import get_puuid, get_ranked_match_ids, get_match, get_timeline
 
 
@@ -34,18 +34,14 @@ def main():
             timeline_errors.append(f'{match_id}: {error}')
     analysis = analyze_matches(matches, puuid, timelines, timeline_errors)
     build_data = load_build_data()
-    if analysis['games']:
-        first_game = analysis['games'][0]
-        champion_key = next((key for key, champion in build_data['champions'].items() if champion['name'] == first_game['champion']), None)
-        opponent_key = next((key for key, champion in build_data['champions'].items() if champion['name'] == first_game.get('opponent_champion')), None)
-        if champion_key and opponent_key:
-            analysis['build'] = champion_build(champion_key, first_game['role'], opponent_key, build_data)
-            print(json.dumps({'rune_count': len(analysis['build']['runes'].get('primary_runes', [])), 'role': first_game['role']}))
-    html = build_html(riot_id, analysis)
+    builds = prepare_duels(analysis['games'], build_data)
+    analysis['build'] = builds[0] if builds else {}
+    html = attach_duels(build_html(riot_id, analysis), builds)
     output_path = os.environ.get('OUTPUT_PATH', 'site/index.html')
     os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
     with open(output_path, 'w', encoding='utf-8') as handle:
         handle.write(html)
+    print(json.dumps({'duels': len(builds), 'primary_rune_counts': [len(b['runes'].get('primary_runes', [])) for b in builds]}))
 
 
 if __name__ == '__main__':
