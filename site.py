@@ -29,7 +29,7 @@ def build_html(riot_id, analysis):
         result = 'Victoire' if won else 'Défaite'
         state = 'win' if won else 'loss'
         opponent = g.get('opponent_champion') or 'Adversaire inconnu'
-        timeline_rows = ''.join(f"<tr><td>{e(p['minute'])} min</td><td class='{gap_class(p['gold_gap'])}'>{e(p['gold_gap']):+}</td><td class='{gap_class(p['xp_gap'])}'>{e(p['xp_gap']):+}</td><td class='{gap_class(p['cs_gap'])}'>{e(p['cs_gap']):+}</td></tr>" for p in g.get('timeline', []))
+        timeline_rows = ''.join(f"<tr><td>{e(p['minute'])} min</td><td class='{gap_class(p['gold_gap'])}'>{fmt_gap(p['gold_gap'])}</td><td class='{gap_class(p['xp_gap'])}'>{fmt_gap(p['xp_gap'])}</td><td class='{gap_class(p['cs_gap'])}'>{fmt_gap(p['cs_gap'])}</td></tr>" for p in g.get('timeline', []))
         timeline_block = f"<details class='drawer'><summary>Timeline vs {e(opponent)}</summary><div class='table-wrap'><table><thead><tr><th>Repère</th><th>Or</th><th>XP</th><th>CS</th></tr></thead><tbody>{timeline_rows}</tbody></table></div><p class='hint'>Positif = avantage.</p></details>" if timeline_rows else '<p class="hint">Timeline indisponible pour cette partie.</p>'
         objectives = g.get('objectives', {})
         champion_items = ''.join(f'<li>{e(item)}</li>' for item in g.get('advice', []))
