@@ -36,6 +36,7 @@ jobs:
       - name: Analyser les games
         env:
           RIOT_API_KEY: ${{ secrets.RIOT_API_KEY }}
+          RIOT_ID: ${{ secrets.RIOT_ID }}
         run: python generate_site.py
 
       - name: Enregistrer le rapport
