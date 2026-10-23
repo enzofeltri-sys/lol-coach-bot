@@ -128,7 +128,7 @@ def progression_plan(games):
     recent_games, previous_games = split_games(games)
     signals = []
 
-    def add_signal(key, title, condition, value_fn, format_fn, evidence_fn, exercise, metric, target, severity_fn):
+    def add_signal(key, title, condition, value_fn, format_fn, evidence_fn, exercise, metric, target, severity_fn, better_direction):
         affected = [g for g in games if condition(g)]
         if not affected:
             return
@@ -138,8 +138,18 @@ def progression_plan(games):
         recent_value = value_fn(recent) if recent else None
         previous_value = value_fn(previous) if previous else None
         evolution = 'Pas assez de parties pour comparer les deux périodes.'
+        trend = 'unknown'
         if recent_value is not None and previous_value is not None:
-            evolution = f"Évolution récente : {format_fn(previous_value)} → {format_fn(recent_value)} sur les parties concernées."
+            delta = recent_value - previous_value
+            if abs(delta) < 1e-9:
+                trend = 'stable'
+                evolution = f"Évolution récente : {format_fn(previous_value)} → {format_fn(recent_value)}. Indicateur stable."
+            elif (delta < 0) == (better_direction == 'lower'):
+                trend = 'improving'
+                evolution = f"Évolution récente : {format_fn(previous_value)} → {format_fn(recent_value)}. Indicateur en amélioration."
+            else:
+                trend = 'worsening'
+                evolution = f"Évolution récente : {format_fn(previous_value)} → {format_fn(recent_value)}. Indicateur en régression."
         affected_wr = win_rate(affected)
         others = [g for g in games if not condition(g)]
         others_wr = win_rate(others)
@@ -151,7 +161,8 @@ def progression_plan(games):
             'evidence': f"{evidence_fn(affected)} {evolution} {impact}",
             'exercise': exercise, 'metric': metric,
             'current': format_fn(recent_value if recent_value is not None else current_value),
-            'target': target, 'severity': severity_fn(affected),
+            'previous': format_fn(previous_value) if previous_value is not None else '—',
+            'trend': trend, 'target': target, 'severity': severity_fn(affected),
         })
 
     def early_condition(g):
@@ -170,6 +181,7 @@ def progression_plan(games):
         'Écart d’or à 10 minutes',
         'Réduire le retard moyen et avoir moins de parties sous -400 or.',
         lambda affected: abs(mean(point10(g)['gold_gap'] for g in affected if point10(g))),
+        'higher',
     )
 
     add_signal(
@@ -182,6 +194,7 @@ def progression_plan(games):
         'Morts par 10 minutes',
         'Faire baisser la moyenne de morts/10 min sur les prochaines parties.',
         lambda affected: mean(g['deaths_per_10'] for g in affected),
+        'lower',
     )
 
     add_signal(
@@ -194,6 +207,7 @@ def progression_plan(games):
         'Participation aux kills',
         'Augmenter la participation aux kills sans abandonner tes ressources.',
         lambda affected: 45 - mean(g['kill_participation'] for g in affected),
+        'higher',
     )
 
     def vision_condition(g):
@@ -208,6 +222,7 @@ def progression_plan(games):
         'Score de vision par minute',
         'Placer une information utile avant les rotations et objectifs.',
         lambda affected: 1 - mean(g['vision_per_min'] for g in affected),
+        'higher',
     )
 
     def damage_condition(g):
@@ -222,13 +237,14 @@ def progression_plan(games):
         'Part des dégâts d’équipe',
         'Augmenter la contribution sans prendre plus de risques inutiles.',
         lambda affected: 18 - mean(g['damage_share'] for g in affected),
+        'higher',
     )
 
     if not signals:
-        return {'priority': 'Continuer la progression', 'why': 'Aucun signal récurrent suffisamment fort dans les données actuelles.', 'evidence': 'Les indicateurs disponibles ne montrent pas de schéma dominant.', 'exercise': ROLE_ADVICE.get(games[0]['role'], ROLE_ADVICE['UNKNOWN']), 'metric': 'À définir après davantage de parties', 'current': '—', 'target': 'Jouer quelques parties supplémentaires pour identifier un schéma.', 'affected_games': 0, 'secondary': []}
+        return {'priority': 'Continuer la progression', 'why': 'Aucun signal récurrent suffisamment fort dans les données actuelles.', 'evidence': 'Les indicateurs disponibles ne montrent pas de schéma dominant.', 'exercise': ROLE_ADVICE.get(games[0]['role'], ROLE_ADVICE['UNKNOWN']), 'metric': 'À définir après davantage de parties', 'current': '—', 'previous': '—', 'trend': 'unknown', 'target': 'Jouer quelques parties supplémentaires pour identifier un schéma.', 'affected_games': 0, 'secondary': []}
     signals.sort(key=lambda s: (-s['count'], -s['severity']))
     primary = signals[0]
-    primary['secondary'] = [{'title': s['title'], 'count': s['count'], 'metric': s['metric'], 'current': s['current']} for s in signals[1:3]]
+    primary['secondary'] = [{'title': s['title'], 'count': s['count'], 'metric': s['metric'], 'current': s['current'], 'previous': s['previous'], 'trend': s['trend']} for s in signals[1:3]]
     primary['affected_games'] = primary['count']
     return primary
 
