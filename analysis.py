@@ -36,7 +36,8 @@ def build_timeline_insight(match, timeline, puuid):
     if not mine or not theirs:
         return []
     role = player.get('teamPosition') or 'UNKNOWN'
-    prefix = f"{match['info']['gameId']} · {player['championName']} ({role}) à {mine['minute']} min"
+    match_id = match['metadata']['matchId']
+    prefix = f"{match_id[-8:]} · {player['championName']} ({role}) à {mine['minute']} min"
     insights = []
     gold_gap = mine['gold'] - theirs['gold']
     xp_gap = mine['xp'] - theirs['xp']
@@ -66,14 +67,16 @@ def analyze_match(match, puuid):
                 deaths_per_10=p['deaths'] * 10 / minutes)
 
 
-def analyze_matches(matches, puuid, timelines=None):
+def analyze_matches(matches, puuid, timelines=None, timeline_errors=None):
     timelines = timelines or {}
+    timeline_errors = timeline_errors or []
     games = [analyze_match(m, puuid) for m in matches]
     if not games:
         raise ValueError('Aucune partie à analyser')
     timeline_insights = []
     for match in matches:
-        timeline = timelines.get(match['info']['gameId'])
+        match_id = match['metadata']['matchId']
+        timeline = timelines.get(match_id)
         if timeline:
             timeline_insights.extend(build_timeline_insight(match, timeline, puuid))
     groups = defaultdict(list)
@@ -109,13 +112,17 @@ def analyze_matches(matches, puuid, timelines=None):
     if not strengths:
         strengths = ['Pas de point fort déduit automatique : échantillon insuffisant ou contexte manquant.']
     if not timeline_insights:
-        timeline_insights = ['Aucun repère timeline exploitable : données indisponibles, adversaire non identifié ou partie trop courte.']
+        if timeline_errors:
+            timeline_insights = ['Timelines indisponibles : ' + ' ; '.join(timeline_errors) + '. Action : vérifier le statut du job et relancer après résolution.']
+        else:
+            timeline_insights = ['Aucun repère timeline exploitable : données indisponibles, adversaire non identifié ou partie trop courte.']
     result = dict(games=games, avg_deaths=round(mean(g['deaths'] for g in games), 2),
                   avg_cs_per_min=round(mean(g['cs_per_min'] for g in games), 2),
                   avg_wards_per_min=round(mean(g['wards_per_min'] for g in games), 2),
                   avg_kda=round(mean(g['kda'] for g in games), 2),
                   win_rate=round(100 * sum(g['win'] for g in games) / len(games)),
-                  issues=issues, strengths=strengths, timeline_insights=timeline_insights)
+                  issues=issues, strengths=strengths, timeline_insights=timeline_insights,
+                  timeline_errors=timeline_errors)
     for g in games:
         for key in ('cs_per_min', 'wards_per_min', 'duration_min', 'deaths_per_10'):
             g[key] = round(g[key], 2)

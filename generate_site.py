@@ -68,13 +68,17 @@ def main():
         raise RuntimeError('Aucune ranked récente trouvée.')
     matches = [get_match(match_id) for match_id in match_ids]
     timelines = {}
+    timeline_errors = []
     for match in matches:
-        match_id = match['info']['gameId']
+        match_id = match['metadata']['matchId']
         try:
             timelines[match_id] = get_timeline(match_id)
         except Exception as error:
-            print(f'Timeline indisponible pour {match_id} : {type(error).__name__}')
-    analysis = analyze_matches(matches, puuid, timelines)
+            detail = getattr(error, 'response', None)
+            status = getattr(detail, 'status_code', None)
+            timeline_errors.append(f'{match_id} : {type(error).__name__}' + (f' (HTTP {status})' if status else ''))
+            print(f'Timeline indisponible pour {match_id} : {type(error).__name__}' + (f' HTTP {status}' if status else ''))
+    analysis = analyze_matches(matches, puuid, timelines, timeline_errors)
     os.makedirs('site', exist_ok=True)
     Path('rapport.md').write_text(build_report(RIOT_ID, analysis), encoding='utf-8')
     html = renderer.build_html(RIOT_ID, analysis)

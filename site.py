@@ -27,12 +27,14 @@ def build_html(riot_id, analysis):
     issues = ''.join(f'<li>{e(item)}</li>' for item in analysis['issues'])
     strengths = ''.join(f'<li>{e(item)}</li>' for item in analysis['strengths'])
     timeline_items = ''.join(f'<li>{e(item)}</li>' for item in analysis.get('timeline_insights', []))
+    timeline_errors = analysis.get('timeline_errors', [])
+    error_note = f'<p class="note">Diagnostic : {e(" ; ".join(timeline_errors))}</p>' if timeline_errors else ''
     return f'''<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#080f1c"><title>{e(riot_id)} · LoL Coach</title><style>{css}</style></head><body><main>
 <header><small>LOL COACH · EUW · SOLO/DUO</small><h1>{e(riot_id)}</h1><p class="muted">Ton bilan sur {len(games)} parties récentes, pour préparer la suivante.</p><small>Rapport généré le {updated}</small><nav><a href="#matches">Mes parties</a><a href="https://github.com/enzofeltri-sys/lol-coach-bot/actions/workflows/analyze.yml" target="_blank" rel="noopener">Ouvrir le workflow ↗</a></nav><small>Mise à jour horaire prévue, sous réserve d’une clé Riot valide. Ce lien ouvre GitHub et ne lance pas l’analyse à lui seul.</small></header>
 <section class="stats" aria-label="Statistiques globales">{stats}</section>
 <p class="note">Lecture prudente : ces moyennes ne prouvent pas des erreurs de décision. Les repères actuels ne sont pas adaptés à chaque rôle ; notamment, le farm d’un support ne se juge pas comme celui d’un carry. Le KDA ne mesure pas à lui seul l’impact.</p>
 <div class="columns"><section class="panel"><h2>Pistes à vérifier</h2><ul>{issues}</ul></section><section class="panel"><h2>Indicateurs favorables</h2><ul>{strengths}</ul></section></div>
-<section class="panel"><h2>Repères à 10 minutes</h2><p class="muted">Comparaison avec l’adversaire du même rôle, lorsque la timeline Riot est disponible. Ce sont des observations, pas des preuves de faute.</p><ul>{timeline_items}</ul></section>
+<section class="panel"><h2>Repères à 10 minutes</h2><p class="muted">Comparaison avec l’adversaire du même rôle, lorsque la timeline Riot est disponible. Ce sont des observations, pas des preuves de faute.</p>{error_note}<ul>{timeline_items}</ul></section>
 <section class="panel"><h2>Champions joués</h2><ul class="champions">{champion_rows}</ul></section>
 <section id="matches"><h2>Dernières parties · ordre de récupération Riot</h2><div class="filters" role="group" aria-label="Filtrer les parties"><button type="button" data-filter="all" aria-pressed="true">Toutes</button><button type="button" data-filter="win" aria-pressed="false">Victoires</button><button type="button" data-filter="loss" aria-pressed="false">Défaites</button></div><p id="match-count" class="muted" aria-live="polite">{len(games)} partie(s) affichée(s)</p>{cards}</section>
 <footer>Analyse statistique et timeline post-match, sans analyse vidéo ni diagnostic certain des décisions. Projet personnel non affilié à Riot Games. Aucune clé API n’est incluse dans cette page.</footer>
