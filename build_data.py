@@ -44,12 +44,31 @@ def rune_details(style_name, rune_ids, data):
     return []
 
 
+def find_rune_entry(recommendations, champion_key):
+    key = str(champion_key).lower()
+    if isinstance(recommendations, dict):
+        return recommendations.get(champion_key) or recommendations.get(key)
+    if isinstance(recommendations, list):
+        for item in recommendations:
+            if not isinstance(item, dict):
+                continue
+            values = [str(item.get(field, '')).lower() for field in ('championKey', 'champion', 'championId', 'key', 'name', 'id')]
+            if key in values:
+                return item
+    return None
+
+
 def recommended_runes(champion_key, data):
-    recommendations = data.get('rune_recommendations', {})
-    entry = recommendations.get(champion_key) or recommendations.get(champion_key.lower())
+    recommendations = data.get('rune_recommendations', [])
+    entry = find_rune_entry(recommendations, champion_key)
     if not entry:
         return {'primary': 'Recommandation indisponible', 'secondary': 'Recommandation indisponible', 'shards': 'Adaptation / Adaptation / Défense', 'primary_icon': '', 'secondary_icon': '', 'primary_runes': [], 'source': 'CommunityDragon'}
-    pages = entry if isinstance(entry, list) else entry.get('recommendations', entry.get('runes', []))
+    if isinstance(entry, list):
+        pages = entry
+    elif isinstance(entry, dict):
+        pages = entry.get('recommendations') or entry.get('runes') or []
+    else:
+        pages = []
     first = pages[0] if pages else {}
     primary = first.get('primaryStyleName') or first.get('primaryStyle') or 'Recommandation indisponible'
     secondary = first.get('subStyleName') or first.get('subStyle') or 'Recommandation indisponible'
