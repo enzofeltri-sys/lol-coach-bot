@@ -6,10 +6,12 @@ DDRAGON_BASE = 'https://ddragon.leagueoflegends.com/cdn/{version}/data/fr_FR'
 DDRAGON_IMAGES = 'https://ddragon.leagueoflegends.com/cdn/img'
 CDRAGON_BASE = 'https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1'
 RUNE_RECOMMENDATIONS = f'{CDRAGON_BASE}/champion-rune-recommendations.json'
+HEADERS = {'User-Agent': 'Mozilla/5.0 (compatible; LoLCoachBot/1.0)'}
 
 
 def fetch_json(url):
-    with urllib.request.urlopen(url, timeout=20) as response:
+    request = urllib.request.Request(url, headers=HEADERS)
+    with urllib.request.urlopen(request, timeout=20) as response:
         return json.loads(response.read().decode('utf-8'))
 
 
