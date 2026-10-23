@@ -128,7 +128,7 @@ def progression_plan(games):
     recent_games, previous_games = split_games(games)
     signals = []
 
-    def add_signal(key, title, condition, value_fn, format_fn, base_evidence, exercise, metric, target, severity_fn):
+    def add_signal(key, title, condition, value_fn, format_fn, evidence_fn, exercise, metric, target, severity_fn):
         affected = [g for g in games if condition(g)]
         if not affected:
             return
@@ -148,7 +148,7 @@ def progression_plan(games):
             impact = f"Winrate : {affected_wr}% dans les parties concernées contre {others_wr}% dans les autres."
         signals.append({
             'key': key, 'title': title, 'count': len(affected),
-            'evidence': f"{base_evidence} {evolution} {impact}",
+            'evidence': f"{evidence_fn(affected)} {evolution} {impact}",
             'exercise': exercise, 'metric': metric,
             'current': format_fn(recent_value if recent_value is not None else current_value),
             'target': target, 'severity': severity_fn(affected),
