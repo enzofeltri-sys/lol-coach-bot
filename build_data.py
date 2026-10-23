@@ -19,26 +19,39 @@ def load_build_data():
     return {'version': version, 'champions': champions, 'items': items, 'runes': runes}
 
 
-def champion_build(champion_key, role, data):
+def champion_build(champion_key, role, opponent_key, data):
     champion = data['champions'].get(champion_key)
+    opponent = data['champions'].get(opponent_key)
     if not champion:
         raise ValueError(f'Champion inconnu : {champion_key}')
+    if not opponent:
+        raise ValueError(f'Adversaire inconnu : {opponent_key}')
+    opponent_tags = opponent.get('tags', [])
+    is_magic = 'Mage' in opponent_tags
+    is_physical = 'Fighter' in opponent_tags or 'Marksman' in opponent_tags or 'Assassin' in opponent_tags
     return {
         'champion': champion['name'],
+        'opponent': opponent['name'],
         'role': role,
         'patch': data['version'],
-        'runes': {'primary': 'À sélectionner selon le matchup', 'secondary': 'À sélectionner selon le matchup', 'shards': 'Adaptation / Adaptation / Défense', 'source': 'CommunityDragon'},
+        'runes': {'primary': 'Adaptation selon le matchup', 'secondary': 'Adaptation selon le matchup', 'shards': 'Adaptation / Adaptation / Défense', 'source': 'CommunityDragon'},
         'summoners': ['Flash', 'Téléport' if role in {'TOP', 'MIDDLE'} else 'Soin' if role == 'BOTTOM' else 'Ignite'],
         'skill_order': 'Q > E > W, R aux niveaux 6, 11 et 16',
         'starting_items': ['Potion de santé', 'Ward furtive'],
         'core_items': ['Premier item selon le matchup', 'Deuxième item selon la composition', 'Troisième item selon l’état de la partie'],
-        'situational_items': ['Anti-soin si régénération ennemie', 'Résistance magique si dégâts AP', 'Armure si dégâts physiques', 'Contrôle si menaces CC'],
+        'situational_items': (['Résistance magique contre les dégâts AP'] if is_magic else []) + (['Armure contre les dégâts physiques'] if is_physical else []) + ['Anti-soin si régénération ennemie', 'Contrôle si menaces CC'],
         'power_spikes': [
-            {'moment': 'Niveau 2', 'advice': 'Premier trade possible : cherche un avantage de vague et une position sûre.'},
-            {'moment': 'Niveau 3', 'advice': 'Kit complet : cherche un trade ou un all-in seulement avec vision et sortie.'},
-            {'moment': 'Niveau 6', 'advice': 'Ultimate disponible : prépare une pression de lane, un gank ou un objectif.'},
+            {'moment': 'Niveau 2', 'advice': f"Contre {opponent['name']}, identifie sa deuxième compétence et évite son premier trade tant que tu n’as pas d’avantage de vague ou de vision."},
+            {'moment': 'Niveau 3', 'advice': f"Contre {opponent['name']}, cherche un trade seulement si sa compétence clé est indisponible ou si tu as une sortie."},
+            {'moment': 'Niveau 6', 'advice': f"Contre {opponent['name']}, respecte son ultimate : ne engage pas sans savoir s’il est disponible."},
             {'moment': 'Premier item', 'advice': 'Utilise le spike pour convertir l’avantage en tour, objectif ou pression de map.'},
             {'moment': 'Deux items', 'advice': 'Pic de puissance fréquent : cherche un combat contrôlé ou un objectif.'},
             {'moment': 'Niveaux 11 et 16', 'advice': 'Montées d’ultimate : repositionne-toi autour des combats d’équipe et des objectifs.'},
+        ],
+        'matchup_plan': [
+            f"Identifie la compétence clé de {opponent['name']} et garde une sortie pour y répondre.",
+            'Ne engage pas sans vision, sans avantage de vague ou sans savoir où sont deux ennemis.',
+            'Après un trade perdu ou une mort, sécurise d’abord une vague, un camp ou une ward défensive.',
+            'Convertis un avantage par une tour, un objectif ou une pression de map plutôt qu’en cherchant un nouveau duel.',
         ],
     }

@@ -23,7 +23,10 @@ def main():
     analysis = analyze_matches(matches, puuid, timelines, timeline_errors)
     build_data = load_build_data()
     first_game = analysis['games'][0]
-    analysis['build'] = champion_build(first_game['champion'], first_game['role'], build_data)
+    champion_key = next((key for key, champion in build_data['champions'].items() if champion['name'] == first_game['champion']), None)
+    opponent_key = next((key for key, champion in build_data['champions'].items() if champion['name'] == first_game.get('opponent_champion')), None)
+    if champion_key and opponent_key:
+        analysis['build'] = champion_build(champion_key, first_game['role'], opponent_key, build_data)
     html = build_html(riot_id, analysis)
     output_path = os.environ.get('OUTPUT_PATH', 'index.html')
     with open(output_path, 'w', encoding='utf-8') as handle:
