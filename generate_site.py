@@ -12,6 +12,7 @@ spec.loader.exec_module(renderer)
 
 RIOT_ID = 'Kyoraku#1707'
 GAME_NAME, TAG_LINE = RIOT_ID.split('#')
+MATCH_COUNT = 20
 
 REFRESH_UI = '''
 <section class="panel" aria-label="Actualisation"><button type="button" id="refresh-page">Actualiser la page ↻</button><p id="refresh-status" role="status">Au sommet de la page, tire vers le bas pour actualiser. Cela recharge le dernier rapport publié, sans lancer une analyse Riot ni effacer tout le cache du navigateur.</p></section>
@@ -61,9 +62,9 @@ REFRESH_UI = '''
 
 
 def main():
-    print(f'Analyse des games de {RIOT_ID}...')
+    print(f'Analyse des {MATCH_COUNT} dernières games de {RIOT_ID}...')
     puuid = get_puuid(GAME_NAME, TAG_LINE)
-    match_ids = get_ranked_match_ids(puuid, count=10)
+    match_ids = get_ranked_match_ids(puuid, count=MATCH_COUNT)
     if not match_ids:
         raise RuntimeError('Aucune ranked récente trouvée.')
     matches = [get_match(match_id) for match_id in match_ids]
@@ -74,10 +75,11 @@ def main():
         try:
             timelines[match_id] = get_timeline(match_id)
         except Exception as error:
-            detail = getattr(error, 'response', None)
-            status = getattr(detail, 'status_code', None)
-            timeline_errors.append(f'{match_id} : {type(error).__name__}' + (f' (HTTP {status})' if status else ''))
-            print(f'Timeline indisponible pour {match_id} : {type(error).__name__}' + (f' HTTP {status}' if status else ''))
+            response = getattr(error, 'response', None)
+            status = getattr(response, 'status_code', None)
+            message = f'{match_id} : {type(error).__name__}' + (f' (HTTP {status})' if status else '')
+            timeline_errors.append(message)
+            print(f'Timeline indisponible : {message}')
     analysis = analyze_matches(matches, puuid, timelines, timeline_errors)
     os.makedirs('site', exist_ok=True)
     Path('rapport.md').write_text(build_report(RIOT_ID, analysis), encoding='utf-8')
