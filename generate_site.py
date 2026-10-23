@@ -40,7 +40,8 @@ def main():
     if champion_key and opponent_key:
         analysis['build'] = champion_build(champion_key, first_game['role'], opponent_key, build_data)
     html = build_html(riot_id, analysis)
-    output_path = os.environ.get('OUTPUT_PATH', 'index.html')
+    output_path = os.environ.get('OUTPUT_PATH', 'site/index.html')
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, 'w', encoding='utf-8') as handle:
         handle.write(html)
     print(json.dumps({'riot_id': riot_id, 'games': len(matches), 'output': output_path}))
