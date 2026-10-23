@@ -2,7 +2,7 @@ import os
 import importlib.util
 from pathlib import Path
 
-from riot_api import get_puuid, get_ranked_match_ids, get_match
+from riot_api import get_puuid, get_ranked_match_ids, get_match, get_timeline
 from analysis import analyze_matches
 from report import build_report
 
@@ -67,7 +67,14 @@ def main():
     if not match_ids:
         raise RuntimeError('Aucune ranked récente trouvée.')
     matches = [get_match(match_id) for match_id in match_ids]
-    analysis = analyze_matches(matches, puuid)
+    timelines = {}
+    for match in matches:
+        match_id = match['info']['gameId']
+        try:
+            timelines[match_id] = get_timeline(match_id)
+        except Exception as error:
+            print(f'Timeline indisponible pour {match_id} : {type(error).__name__}')
+    analysis = analyze_matches(matches, puuid, timelines)
     os.makedirs('site', exist_ok=True)
     Path('rapport.md').write_text(build_report(RIOT_ID, analysis), encoding='utf-8')
     html = renderer.build_html(RIOT_ID, analysis)

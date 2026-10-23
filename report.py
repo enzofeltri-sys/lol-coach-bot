@@ -22,6 +22,9 @@ def build_report(riot_id, analysis):
             f"{game['kda']} | {game['cs_per_min']} | {game['wards_per_min']} | {game['deaths']} |"
         )
 
+    lines += ["", "## Repères à 10 minutes", ""]
+    lines += [f"- {item}" for item in analysis.get("timeline_insights", [])]
+
     lines += ["", "## Erreurs récurrentes", ""]
     lines += [f"- {issue}" for issue in analysis["issues"]]
 
