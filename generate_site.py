@@ -3,21 +3,21 @@ import os
 
 from analysis import analyze_matches
 from build_data import champion_build, load_build_data
-from riot_api import fetch_recent_matches, fetch_match_details, fetch_match_timeline
+from riot_api import get_puuid, get_ranked_match_ids, get_match, get_timeline
 from site import build_html
 
 
 def main():
     riot_id = os.environ['RIOT_ID']
     game_name, tag_line = riot_id.split('#')
-    puuid = fetch_puuid(game_name, tag_line)
-    match_ids = fetch_recent_matches(puuid, count=20)
-    matches = [fetch_match_details(match_id) for match_id in match_ids]
+    puuid = get_puuid(game_name, tag_line)
+    match_ids = get_ranked_match_ids(puuid, count=20)
+    matches = [get_match(match_id) for match_id in match_ids]
     timelines = {}
     timeline_errors = []
     for match_id in match_ids:
         try:
-            timelines[match_id] = fetch_match_timeline(match_id)
+            timelines[match_id] = get_timeline(match_id)
         except Exception as error:
             timeline_errors.append(f'{match_id}: {error}')
     analysis = analyze_matches(matches, puuid, timelines, timeline_errors)
@@ -32,11 +32,6 @@ def main():
     with open(output_path, 'w', encoding='utf-8') as handle:
         handle.write(html)
     print(json.dumps({'riot_id': riot_id, 'games': len(matches), 'output': output_path}))
-
-
-def fetch_puuid(game_name, tag_line):
-    from riot_api import fetch_account
-    return fetch_account(game_name, tag_line)['puuid']
 
 
 if __name__ == '__main__':
