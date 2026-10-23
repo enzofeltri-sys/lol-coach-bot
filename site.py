@@ -23,7 +23,9 @@ def build_html(riot_id, analysis):
 
     games = analysis['games']
     updated = datetime.now(timezone.utc).strftime('%d/%m/%Y à %H:%M UTC')
-    plan = analysis.get('progression_plan', {})
+    plan = analysis.get('progression_plan') or {}
+    if not plan.get('priority'):
+        plan = {'priority': 'Continuer la progression', 'why': 'Le plan n’a pas pu être calculé à partir des données disponibles.', 'evidence': 'Relance une analyse après quelques nouvelles parties.', 'exercise': 'Choisis un objectif simple : moins de morts, plus de vision ou de meilleures premières minutes.', 'metric': 'À définir', 'current': '—', 'target': 'Jouer quelques parties supplémentaires.', 'affected_games': 0, 'secondary': []}
     cards = ''
     for g in games:
         won = bool(g['win'])
@@ -79,7 +81,7 @@ def build_html(riot_id, analysis):
 <div class="grid-2 section"><section class="panel"><h2>Pistes à vérifier</h2><ul>{issues}</ul></section><section class="panel"><h2>Indicateurs favorables</h2><ul>{strengths}</ul></section></div>
 </div>
 <div id="plan" class="tab-panel" role="tabpanel" aria-labelledby="tab-plan" hidden>
-<section class="section panel"><div class="section-head"><h2>Priorité de progression</h2><p>Un seul objectif à travailler lors de tes prochaines parties</p></div><h2>{e(plan.get('priority', 'Plan indisponible'))}</h2><p>{e(plan.get('why', ''))}</p><div class="advice-box"><small>Preuve dans tes parties</small><p>{e(plan.get('evidence', ''))}</p></div><div class="advice-box"><small>Exercice pour les prochaines games</small><p>{e(plan.get('exercise', ''))}</p></div><div class="metric-grid"><div><small>Indicateur</small><strong>{e(plan.get('metric', '—'))}</strong></div><div><small>Niveau actuel</small><strong>{e(plan.get('current', '—'))}</strong></div><div><small>Objectif</small><strong>{e(plan.get('target', '—'))}</strong></div><div><small>Parties concernées</small><strong>{e(plan.get('affected_games', 0))}</strong></div></div></section>
+<section class="section panel"><div class="section-head"><h2>Priorité de progression</h2><p>Un seul objectif à travailler lors de tes prochaines parties</p></div><h2>{e(plan.get('priority'))}</h2><p>{e(plan.get('why', ''))}</p><div class="advice-box"><small>Preuve dans tes parties</small><p>{e(plan.get('evidence', ''))}</p></div><div class="advice-box"><small>Exercice pour les prochaines games</small><p>{e(plan.get('exercise', ''))}</p></div><div class="metric-grid"><div><small>Indicateur</small><strong>{e(plan.get('metric', '—'))}</strong></div><div><small>Niveau actuel</small><strong>{e(plan.get('current', '—'))}</strong></div><div><small>Objectif</small><strong>{e(plan.get('target', '—'))}</strong></div><div><small>Parties concernées</small><strong>{e(plan.get('affected_games', 0))}</strong></div></div></section>
 <section class="section panel"><h2>Signaux secondaires</h2><ul>{secondary or '<li>Aucun autre signal suffisamment fort pour l’instant.</li>'}</ul></section>
 </div>
 <div id="matchups" class="tab-panel" role="tabpanel" aria-labelledby="tab-matchups" hidden>
