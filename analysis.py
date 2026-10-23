@@ -114,6 +114,33 @@ def matchup_advice(game, point=None):
     return advice[:4]
 
 
+def progression_plan(games):
+    signals = []
+    point10s = [next((p for p in g.get('timeline', []) if p['minute'] == 10), None) for g in games]
+    early = [(g, p) for g, p in zip(games, point10s) if p and p['gold_gap'] <= -400]
+    if early:
+        signals.append({'key': 'early_gold', 'title': 'Sécuriser les 10 premières minutes', 'count': len(early), 'evidence': f"Retard moyen de {abs(round(mean(p['gold_gap'] for _, p in early))):.0f} or à 10 minutes dans {len(early)} partie(s).", 'exercise': 'Après une mort, une vague perdue ou un recall, retourne d’abord sécuriser une ressource : vague, camp ou ward défensive. Ne cherche pas un trade avant d’avoir une information ou un avantage.', 'metric': 'Écart d’or à 10 minutes', 'current': f"{round(mean(p['gold_gap'] for _, p in early)):+.0f} or", 'target': 'Réduire le retard moyen et avoir moins de parties sous -400 or.', 'severity': abs(mean(p['gold_gap'] for _, p in early))})
+    deadly = [g for g in games if g['deaths_per_10'] >= 5]
+    if deadly:
+        signals.append({'key': 'deaths', 'title': 'Réduire les morts évitables', 'count': len(deadly), 'evidence': f"{len(deadly)} partie(s) avec au moins 5 morts par 10 minutes ; moyenne de {mean(g['deaths_per_10'] for g in deadly):.1f} dans ces parties.", 'exercise': 'Avant chaque engagement, vérifie trois choses : vision, position de tes alliés et sortie possible. Si une condition manque, farm ou contrôle la vision.', 'metric': 'Morts par 10 minutes', 'current': f"{mean(g['deaths_per_10'] for g in deadly):.1f} dans les parties concernées", 'target': 'Faire baisser la moyenne de morts/10 min sur les prochaines parties.', 'severity': mean(g['deaths_per_10'] for g in deadly)})
+    low_kp = [g for g in games if g['role'] != 'UTILITY' and g['kill_participation'] < 45]
+    if low_kp:
+        signals.append({'key': 'participation', 'title': 'Être présent sur les combats utiles', 'count': len(low_kp), 'evidence': f"Participation aux kills sous 45% dans {len(low_kp)} partie(s).", 'exercise': 'Dès que ta vague est poussée, regarde la map et prépare une rotation vers le prochain combat ou objectif.', 'metric': 'Participation aux kills', 'current': f"{mean(g['kill_participation'] for g in low_kp):.1f}%", 'target': 'Augmenter la participation aux kills sans abandonner tes ressources.', 'severity': 45 - mean(g['kill_participation'] for g in low_kp)})
+    low_vision = [g for g in games if (g['role'] == 'UTILITY' and g['vision_per_min'] < 1) or (g['role'] != 'UTILITY' and g['vision_per_min'] < 0.5)]
+    if low_vision:
+        signals.append({'key': 'vision', 'title': 'Mieux contrôler la vision', 'count': len(low_vision), 'evidence': f"Vision faible dans {len(low_vision)} partie(s), selon le rôle.", 'exercise': 'Avant chaque objectif ou déplacement vers une rivière, place une ward sur l’entrée ou la zone de passage.', 'metric': 'Score de vision par minute', 'current': f"{mean(g['vision_per_min'] for g in low_vision):.2f}", 'target': 'Placer une information utile avant les rotations et objectifs.', 'severity': 1 - mean(g['vision_per_min'] for g in low_vision)})
+    low_damage = [g for g in games if g['role'] in {'TOP', 'MIDDLE', 'BOTTOM', 'JUNGLE'} and g['damage_share'] < 18 and g['damage_per_min'] < 500]
+    if low_damage:
+        signals.append({'key': 'damage', 'title': 'Améliorer la contribution en combat', 'count': len(low_damage), 'evidence': f"Moins de 18% des dégâts d’équipe dans {len(low_damage)} partie(s).", 'exercise': 'En combat, reste à portée utile de la cible prioritaire sans être la première personne exposée.', 'metric': 'Part des dégâts d’équipe', 'current': f"{mean(g['damage_share'] for g in low_damage):.1f}%", 'target': 'Augmenter la contribution sans prendre plus de risques inutiles.', 'severity': 18 - mean(g['damage_share'] for g in low_damage)})
+    if not signals:
+        return {'priority': 'Continuer la progression', 'why': 'Aucun signal récurrent suffisamment fort dans les données actuelles.', 'evidence': 'Les indicateurs disponibles ne montrent pas de schéma dominant.', 'exercise': ROLE_ADVICE.get(games[0]['role'], ROLE_ADVICE['UNKNOWN']), 'metric': 'À définir après davantage de parties', 'current': '—', 'target': 'Jouer quelques parties supplémentaires pour identifier un schéma.', 'affected_games': 0, 'secondary': []}
+    signals.sort(key=lambda s: (-s['count'], -s['severity']))
+    primary = signals[0]
+    primary['secondary'] = [{'title': s['title'], 'count': s['count'], 'metric': s['metric'], 'current': s['current']} for s in signals[1:3]]
+    primary['affected_games'] = primary['count']
+    return primary
+
+
 def analyze_match(match, puuid):
     player = find_player(match, puuid)
     minutes = match['info']['gameDuration'] / 60
@@ -215,10 +242,7 @@ def analyze_matches(matches, puuid, timelines=None, timeline_errors=None):
         strengths.append(f"{role} — {n} partie(s) : {wins} victoire(s), {n-wins} défaite(s). Résultat descriptif uniquement.")
     if not timeline_insights:
         timeline_insights = ['Timelines indisponibles : ' + ' ; '.join(timeline_errors)] if timeline_errors else ['Aucun repère timeline exploitable.']
-    matchup_filters = {
-        'roles': sorted({g['role'] for g in games}),
-        'champions': sorted({g['champion'] for g in games}),
-    }
+    matchup_filters = {'roles': sorted({g['role'] for g in games}), 'champions': sorted({g['champion'] for g in games})}
     return dict(
         games=games,
         avg_deaths=round(mean(g['deaths'] for g in games), 2), avg_deaths_per_10=round(mean(g['deaths_per_10'] for g in games), 2),
@@ -231,7 +255,7 @@ def analyze_matches(matches, puuid, timelines=None, timeline_errors=None):
         total_barons=sum(g['objectives']['barons'] for g in games), total_heralds=sum(g['objectives']['heralds'] for g in games),
         timeline_gaps=timeline_gap_averages(games), role_aggregates=role_aggregates(games),
         champion_aggregates=champion_aggregates(games), matchup_aggregates=matchup_aggregates(games),
-        matchup_filters=matchup_filters,
+        matchup_filters=matchup_filters, progression_plan=progression_plan(games),
         win_rate=round(100 * sum(g['win'] for g in games) / len(games)), issues=issues, strengths=strengths,
         timeline_insights=timeline_insights, timeline_errors=timeline_errors,
     )
