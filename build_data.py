@@ -29,17 +29,31 @@ def rune_icon(style_name, data):
     return ''
 
 
+def rune_details(style_name, rune_ids, data):
+    for style in data.get('runes', []):
+        if style.get('name') != style_name:
+            continue
+        details = []
+        for slot in style.get('slots', []):
+            for rune in slot.get('runes', []):
+                if rune.get('id') in rune_ids:
+                    details.append({'name': rune.get('name', ''), 'icon': f"https://ddragon.leagueoflegends.com/cdn/img/{rune.get('icon', '')}"})
+        return details
+    return []
+
+
 def recommended_runes(champion_key, data):
     recommendations = data.get('rune_recommendations', {})
     entry = recommendations.get(champion_key) or recommendations.get(champion_key.lower())
     if not entry:
-        return {'primary': 'Recommandation indisponible', 'secondary': 'Recommandation indisponible', 'shards': 'Adaptation / Adaptation / Défense', 'primary_icon': '', 'secondary_icon': '', 'source': 'CommunityDragon'}
+        return {'primary': 'Recommandation indisponible', 'secondary': 'Recommandation indisponible', 'shards': 'Adaptation / Adaptation / Défense', 'primary_icon': '', 'secondary_icon': '', 'primary_runes': [], 'source': 'CommunityDragon'}
     pages = entry if isinstance(entry, list) else entry.get('recommendations', entry.get('runes', []))
     first = pages[0] if pages else {}
     primary = first.get('primaryStyleName') or first.get('primaryStyle') or 'Recommandation indisponible'
     secondary = first.get('subStyleName') or first.get('subStyle') or 'Recommandation indisponible'
     shards = ' / '.join(str(shard) for shard in first.get('statShards', [])) or 'Adaptation / Adaptation / Défense'
-    return {'primary': primary, 'secondary': secondary, 'shards': shards, 'primary_icon': rune_icon(primary, data), 'secondary_icon': rune_icon(secondary, data), 'source': 'CommunityDragon'}
+    rune_ids = first.get('primaryRuneIds') or first.get('selectedPerkIds') or []
+    return {'primary': primary, 'secondary': secondary, 'shards': shards, 'primary_icon': rune_icon(primary, data), 'secondary_icon': rune_icon(secondary, data), 'primary_runes': rune_details(primary, rune_ids, data), 'source': 'CommunityDragon'}
 
 
 def champion_build(champion_key, role, opponent_key, data):
