@@ -67,6 +67,48 @@ def timeline_points(timeline, player, opponent):
     return points
 
 
+def decisive_moments(match, timeline, player, opponent, game):
+    frames = timeline.get('info', {}).get('frames', [])
+    events = [event for frame in frames for event in frame.get('events', [])]
+    player_id = player['participantId']
+    early_death = next(({'minute': round(event['timestamp'] / 60000, 1), 'type': 'death'} for event in events if event.get('type') == 'CHAMPION_KILL' and event.get('victimId') == player_id and event['timestamp'] <= 14 * 60000), None)
+    first_disadvantage = None
+    for point in game.get('timeline', []):
+        worst = min([('or', point['gold_gap'], -400), ('XP', point['xp_gap'], -500), ('CS', point['cs_gap'], -20)], key=lambda item: item[1] / item[2] if item[2] else 0)
+        if worst[1] <= worst[2]:
+            first_disadvantage = {'minute': point['minute'], 'metric': worst[0], 'gap': worst[1]}
+            break
+    objective_events = [event for event in events if event.get('type') in {'DRAGON_KILL', 'RIFTHERALD_KILL', 'BARON_NASHOR_KILL'}]
+    vision_before = []
+    for event in objective_events:
+        objective_time = event['timestamp']
+        wards = sum(1 for prior in events if prior.get('type') == 'WARD_PLACED' and prior.get('creatorId') == player_id and objective_time - 90000 <= prior['timestamp'] < objective_time)
+        vision_before.append({'objective': event.get('monsterType') or event.get('type'), 'minute': round(objective_time / 60000, 1), 'wards': wards})
+    point10 = next((p for p in game.get('timeline', []) if p['minute'] == 10), None)
+    conversion = None
+    if point10 and point10['gold_gap'] >= 400:
+        following = [p for p in game.get('timeline', []) if p['minute'] > 10]
+        next_point = following[0] if following else None
+        conversion = {'lead': point10['gold_gap'], 'next_gold_gap': next_point['gold_gap'] if next_point else None, 'status': 'maintained' if next_point and next_point['gold_gap'] >= point10['gold_gap'] * 0.5 else 'lost'}
+    advice = []
+    if early_death:
+        advice.append(f"Ta première mort intervient à {early_death['minute']} minutes. Revois l’engagement juste avant : vision, position des alliés et possibilité de sortie.")
+    if first_disadvantage:
+        advice.append(f"Ton premier désavantage apparaît à {first_disadvantage['minute']} minutes sur {first_disadvantage['metric']} ({first_disadvantage['gap']:+d}). Revois la vague ou la rotation juste avant ce repère.")
+    if vision_before:
+        low_vision = [item for item in vision_before if item['wards'] == 0]
+        if low_vision:
+            advice.append(f"Aucune ward placée dans les 90 secondes avant {len(low_vision)} objectif(s). Place une information sur l’entrée ou la rivière avant la rotation.")
+    if conversion:
+        if conversion['status'] == 'lost':
+            advice.append(f"Tu avais {conversion['lead']} or d’avance à 10 minutes, mais l’avantage n’a pas été converti. Cherche une tour, un objectif ou une pression de map juste après ton lead.")
+        else:
+            advice.append(f"Tu as maintenu ton avance de {conversion['lead']} or à 10 minutes. Continue à convertir l’avantage par la pression d’objectif et le contrôle de vision.")
+    if not advice:
+        advice.append('Aucun moment décisif majeur n’a été détecté dans les repères timeline disponibles.')
+    return {'early_death': early_death, 'first_disadvantage': first_disadvantage, 'vision_before_objective': vision_before, 'advantage_conversion': conversion, 'advice': advice[:4]}
+
+
 def personalized_advice(game, point=None):
     advice = []
     role = game['role']
@@ -156,14 +198,7 @@ def progression_plan(games):
         impact = 'Impact non calculable avec l’échantillon actuel.'
         if affected_wr is not None and others_wr is not None:
             impact = f"Winrate : {affected_wr}% dans les parties concernées contre {others_wr}% dans les autres."
-        signals.append({
-            'key': key, 'title': title, 'count': len(affected),
-            'evidence': f"{evidence_fn(affected)} {evolution} {impact}",
-            'exercise': exercise, 'metric': metric,
-            'current': format_fn(recent_value if recent_value is not None else current_value),
-            'previous': format_fn(previous_value) if previous_value is not None else '—',
-            'trend': trend, 'target': target, 'severity': severity_fn(affected),
-        })
+        signals.append({'key': key, 'title': title, 'count': len(affected), 'evidence': f"{evidence_fn(affected)} {evolution} {impact}", 'exercise': exercise, 'metric': metric, 'current': format_fn(recent_value if recent_value is not None else current_value), 'previous': format_fn(previous_value) if previous_value is not None else '—', 'trend': trend, 'target': target, 'severity': severity_fn(affected)})
 
     def early_condition(g):
         point = point10(g)
@@ -173,73 +208,19 @@ def progression_plan(games):
         points = [point10(g) for g in sample if point10(g)]
         return mean(p['gold_gap'] for p in points) if points else None
 
-    add_signal(
-        'early_gold', 'Sécuriser les 10 premières minutes', early_condition, early_value,
-        lambda value: f"{value:+.0f} or à 10 min",
-        lambda affected: f"Retard moyen de {abs(round(mean(point10(g)['gold_gap'] for g in affected if point10(g)))):.0f} or à 10 minutes dans {len(affected)} partie(s).",
-        'Après une mort, une vague perdue ou un recall, retourne d’abord sécuriser une ressource : vague, camp ou ward défensive. Ne cherche pas un trade avant d’avoir une information ou un avantage.',
-        'Écart d’or à 10 minutes',
-        'Réduire le retard moyen et avoir moins de parties sous -400 or.',
-        lambda affected: abs(mean(point10(g)['gold_gap'] for g in affected if point10(g))),
-        'higher',
-    )
-
-    add_signal(
-        'deaths', 'Réduire les morts évitables',
-        lambda g: g['deaths_per_10'] >= 5,
-        lambda sample: mean(g['deaths_per_10'] for g in sample),
-        lambda value: f"{value:.1f} morts/10 min",
-        lambda affected: f"{len(affected)} partie(s) avec au moins 5 morts par 10 minutes ; moyenne de {mean(g['deaths_per_10'] for g in affected):.1f} dans ces parties.",
-        'Avant chaque engagement, vérifie trois choses : vision, position de tes alliés et sortie possible. Si une condition manque, farm ou contrôle la vision.',
-        'Morts par 10 minutes',
-        'Faire baisser la moyenne de morts/10 min sur les prochaines parties.',
-        lambda affected: mean(g['deaths_per_10'] for g in affected),
-        'lower',
-    )
-
-    add_signal(
-        'participation', 'Être présent sur les combats utiles',
-        lambda g: g['role'] != 'UTILITY' and g['kill_participation'] < 45,
-        lambda sample: mean(g['kill_participation'] for g in sample),
-        lambda value: f"{value:.1f}% de participation",
-        lambda affected: f"Participation aux kills sous 45% dans {len(affected)} partie(s).",
-        'Dès que ta vague est poussée, regarde la map et prépare une rotation vers le prochain combat ou objectif.',
-        'Participation aux kills',
-        'Augmenter la participation aux kills sans abandonner tes ressources.',
-        lambda affected: 45 - mean(g['kill_participation'] for g in affected),
-        'higher',
-    )
+    add_signal('early_gold', 'Sécuriser les 10 premières minutes', early_condition, early_value, lambda value: f"{value:+.0f} or à 10 min", lambda affected: f"Retard moyen de {abs(round(mean(point10(g)['gold_gap'] for g in affected if point10(g)))):.0f} or à 10 minutes dans {len(affected)} partie(s).", 'Après une mort, une vague perdue ou un recall, retourne d’abord sécuriser une ressource : vague, camp ou ward défensive. Ne cherche pas un trade avant d’avoir une information ou un avantage.', 'Écart d’or à 10 minutes', 'Réduire le retard moyen et avoir moins de parties sous -400 or.', lambda affected: abs(mean(point10(g)['gold_gap'] for g in affected if point10(g))), 'higher')
+    add_signal('deaths', 'Réduire les morts évitables', lambda g: g['deaths_per_10'] >= 5, lambda sample: mean(g['deaths_per_10'] for g in sample), lambda value: f"{value:.1f} morts/10 min", lambda affected: f"{len(affected)} partie(s) avec au moins 5 morts par 10 minutes ; moyenne de {mean(g['deaths_per_10'] for g in affected):.1f} dans ces parties.", 'Avant chaque engagement, vérifie trois choses : vision, position de tes alliés et sortie possible. Si une condition manque, farm ou contrôle la vision.', 'Morts par 10 minutes', 'Faire baisser la moyenne de morts/10 min sur les prochaines parties.', lambda affected: mean(g['deaths_per_10'] for g in affected), 'lower')
+    add_signal('participation', 'Être présent sur les combats utiles', lambda g: g['role'] != 'UTILITY' and g['kill_participation'] < 45, lambda sample: mean(g['kill_participation'] for g in sample), lambda value: f"{value:.1f}% de participation", lambda affected: f"Participation aux kills sous 45% dans {len(affected)} partie(s).", 'Dès que ta vague est poussée, regarde la map et prépare une rotation vers le prochain combat ou objectif.', 'Participation aux kills', 'Augmenter la participation aux kills sans abandonner tes ressources.', lambda affected: 45 - mean(g['kill_participation'] for g in affected), 'higher')
 
     def vision_condition(g):
         return (g['role'] == 'UTILITY' and g['vision_per_min'] < 1) or (g['role'] != 'UTILITY' and g['vision_per_min'] < 0.5)
 
-    add_signal(
-        'vision', 'Mieux contrôler la vision', vision_condition,
-        lambda sample: mean(g['vision_per_min'] for g in sample),
-        lambda value: f"{value:.2f} vision/min",
-        lambda affected: f"Vision faible dans {len(affected)} partie(s), selon le rôle.",
-        'Avant chaque objectif ou déplacement vers une rivière, place une ward sur l’entrée ou la zone de passage.',
-        'Score de vision par minute',
-        'Placer une information utile avant les rotations et objectifs.',
-        lambda affected: 1 - mean(g['vision_per_min'] for g in affected),
-        'higher',
-    )
+    add_signal('vision', 'Mieux contrôler la vision', vision_condition, lambda sample: mean(g['vision_per_min'] for g in sample), lambda value: f"{value:.2f} vision/min", lambda affected: f"Vision faible dans {len(affected)} partie(s), selon le rôle.", 'Avant chaque objectif ou déplacement vers une rivière, place une ward sur l’entrée ou la zone de passage.', 'Score de vision par minute', 'Placer une information utile avant les rotations et objectifs.', lambda affected: 1 - mean(g['vision_per_min'] for g in affected), 'higher')
 
     def damage_condition(g):
         return g['role'] in {'TOP', 'MIDDLE', 'BOTTOM', 'JUNGLE'} and g['damage_share'] < 18 and g['damage_per_min'] < 500
 
-    add_signal(
-        'damage', 'Améliorer la contribution en combat', damage_condition,
-        lambda sample: mean(g['damage_share'] for g in sample),
-        lambda value: f"{value:.1f}% des dégâts d’équipe",
-        lambda affected: f"Moins de 18% des dégâts d’équipe dans {len(affected)} partie(s).",
-        'En combat, reste à portée utile de la cible prioritaire sans être la première personne exposée.',
-        'Part des dégâts d’équipe',
-        'Augmenter la contribution sans prendre plus de risques inutiles.',
-        lambda affected: 18 - mean(g['damage_share'] for g in affected),
-        'higher',
-    )
-
+    add_signal('damage', 'Améliorer la contribution en combat', damage_condition, lambda sample: mean(g['damage_share'] for g in sample), lambda value: f"{value:.1f}% des dégâts d’équipe", lambda affected: f"Moins de 18% des dégâts d’équipe dans {len(affected)} partie(s).", 'En combat, reste à portée utile de la cible prioritaire sans être la première personne exposée.', 'Part des dégâts d’équipe', 'Augmenter la contribution sans prendre plus de risques inutiles.', lambda affected: 18 - mean(g['damage_share'] for g in affected), 'higher')
     if not signals:
         return {'priority': 'Continuer la progression', 'why': 'Aucun signal récurrent suffisamment fort dans les données actuelles.', 'evidence': 'Les indicateurs disponibles ne montrent pas de schéma dominant.', 'exercise': ROLE_ADVICE.get(games[0]['role'], ROLE_ADVICE['UNKNOWN']), 'metric': 'À définir après davantage de parties', 'current': '—', 'previous': '—', 'trend': 'unknown', 'target': 'Jouer quelques parties supplémentaires pour identifier un schéma.', 'affected_games': 0, 'secondary': []}
     signals.sort(key=lambda s: (-s['count'], -s['severity']))
@@ -257,12 +238,7 @@ def analyze_match(match, puuid):
     data = participant_metrics(match, player, minutes)
     opponent = find_opponent(match, player)
     opponent_champion = opponent.get('championName') if opponent else None
-    data.update({
-        'match_id': match['metadata']['matchId'], 'patch': match['info'].get('gameVersion', 'inconnu'),
-        'queue': match['info'].get('queueId'), 'mode': match['info'].get('gameMode', 'inconnu'),
-        'opponent_champion': opponent_champion, 'objectives': team_objectives(match, player), 'timeline': [],
-        'advice': [], 'matchup_advice': [],
-    })
+    data.update({'match_id': match['metadata']['matchId'], 'patch': match['info'].get('gameVersion', 'inconnu'), 'queue': match['info'].get('queueId'), 'mode': match['info'].get('gameMode', 'inconnu'), 'opponent_champion': opponent_champion, 'objectives': team_objectives(match, player), 'timeline': [], 'decisive_moments': None, 'advice': [], 'matchup_advice': []})
     return data
 
 
@@ -324,6 +300,7 @@ def analyze_matches(matches, puuid, timelines=None, timeline_errors=None):
         if opponent:
             game['timeline'] = timeline_points(timeline, player, opponent)
             point10 = next((p for p in game['timeline'] if p['minute'] == 10), None)
+            game['decisive_moments'] = decisive_moments(match, timeline, player, opponent, game)
             game['advice'] = personalized_advice(game, point10)
             game['matchup_advice'] = matchup_advice(game, point10)
             if point10:
@@ -351,19 +328,4 @@ def analyze_matches(matches, puuid, timelines=None, timeline_errors=None):
     if not timeline_insights:
         timeline_insights = ['Timelines indisponibles : ' + ' ; '.join(timeline_errors)] if timeline_errors else ['Aucun repère timeline exploitable.']
     matchup_filters = {'roles': sorted({g['role'] for g in games}), 'champions': sorted({g['champion'] for g in games})}
-    return dict(
-        games=games,
-        avg_deaths=round(mean(g['deaths'] for g in games), 2), avg_deaths_per_10=round(mean(g['deaths_per_10'] for g in games), 2),
-        avg_cs_per_min=round(mean(g['cs_per_min'] for g in games), 2), avg_wards_per_min=round(mean(g['wards_per_min'] for g in games), 2),
-        avg_vision_per_min=round(mean(g['vision_per_min'] for g in games), 2), avg_damage_per_min=round(mean(g['damage_per_min'] for g in games), 2),
-        avg_damage_taken_per_min=round(mean(g['damage_taken_per_min'] for g in games), 2), avg_gold_per_min=round(mean(g['gold_per_min'] for g in games), 2),
-        avg_kda=round(mean(g['kda'] for g in games), 2), avg_kill_participation=round(mean(g['kill_participation'] for g in games), 1),
-        avg_cc_per_min=round(mean(g['cc_per_min'] for g in games), 2),
-        total_towers=sum(g['objectives']['towers'] for g in games), total_dragons=sum(g['objectives']['dragons'] for g in games),
-        total_barons=sum(g['objectives']['barons'] for g in games), total_heralds=sum(g['objectives']['heralds'] for g in games),
-        timeline_gaps=timeline_gap_averages(games), role_aggregates=role_aggregates(games),
-        champion_aggregates=champion_aggregates(games), matchup_aggregates=matchup_aggregates(games),
-        matchup_filters=matchup_filters, progression_plan=progression_plan(games),
-        win_rate=round(100 * sum(g['win'] for g in games) / len(games)), issues=issues, strengths=strengths,
-        timeline_insights=timeline_insights, timeline_errors=timeline_errors,
-    )
+    return dict(games=games, avg_deaths=round(mean(g['deaths'] for g in games), 2), avg_deaths_per_10=round(mean(g['deaths_per_10'] for g in games), 2), avg_cs_per_min=round(mean(g['cs_per_min'] for g in games), 2), avg_wards_per_min=round(mean(g['wards_per_min'] for g in games), 2), avg_vision_per_min=round(mean(g['vision_per_min'] for g in games), 2), avg_damage_per_min=round(mean(g['damage_per_min'] for g in games), 2), avg_damage_taken_per_min=round(mean(g['damage_taken_per_min'] for g in games), 2), avg_gold_per_min=round(mean(g['gold_per_min'] for g in games), 2), avg_kda=round(mean(g['kda'] for g in games), 2), avg_kill_participation=round(mean(g['kill_participation'] for g in games), 1), avg_cc_per_min=round(mean(g['cc_per_min'] for g in games), 2), total_towers=sum(g['objectives']['towers'] for g in games), total_dragons=sum(g['objectives']['dragons'] for g in games), total_barons=sum(g['objectives']['barons'] for g in games), total_heralds=sum(g['objectives']['heralds'] for g in games), timeline_gaps=timeline_gap_averages(games), role_aggregates=role_aggregates(games), champion_aggregates=champion_aggregates(games), matchup_aggregates=matchup_aggregates(games), matchup_filters=matchup_filters, progression_plan=progression_plan(games), win_rate=round(100 * sum(g['win'] for g in games) / len(games)), issues=issues, strengths=strengths, timeline_insights=timeline_insights, timeline_errors=timeline_errors)
