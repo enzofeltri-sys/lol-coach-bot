@@ -3,6 +3,7 @@ import urllib.request
 
 DDRAGON_VERSIONS = 'https://ddragon.leagueoflegends.com/api/versions.json'
 DDRAGON_BASE = 'https://ddragon.leagueoflegends.com/cdn/{version}/data/fr_FR'
+DDRAGON_IMAGES = 'https://ddragon.leagueoflegends.com/cdn/img'
 CDRAGON_BASE = 'https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1'
 RUNE_RECOMMENDATIONS = f'{CDRAGON_BASE}/champion-rune-recommendations.json'
 
@@ -21,17 +22,24 @@ def load_build_data():
     return {'version': version, 'champions': champions, 'items': items, 'runes': runes, 'rune_recommendations': rune_recommendations}
 
 
+def rune_icon(style_name, data):
+    for style in data.get('runes', []):
+        if style.get('name') == style_name:
+            return f"https://ddragon.leagueoflegends.com/cdn/img/{style.get('icon', '')}"
+    return ''
+
+
 def recommended_runes(champion_key, data):
     recommendations = data.get('rune_recommendations', {})
     entry = recommendations.get(champion_key) or recommendations.get(champion_key.lower())
     if not entry:
-        return {'primary': 'Recommandation indisponible', 'secondary': 'Recommandation indisponible', 'shards': 'Adaptation / Adaptation / Défense', 'source': 'CommunityDragon'}
+        return {'primary': 'Recommandation indisponible', 'secondary': 'Recommandation indisponible', 'shards': 'Adaptation / Adaptation / Défense', 'primary_icon': '', 'secondary_icon': '', 'source': 'CommunityDragon'}
     pages = entry if isinstance(entry, list) else entry.get('recommendations', entry.get('runes', []))
     first = pages[0] if pages else {}
     primary = first.get('primaryStyleName') or first.get('primaryStyle') or 'Recommandation indisponible'
     secondary = first.get('subStyleName') or first.get('subStyle') or 'Recommandation indisponible'
     shards = ' / '.join(str(shard) for shard in first.get('statShards', [])) or 'Adaptation / Adaptation / Défense'
-    return {'primary': primary, 'secondary': secondary, 'shards': shards, 'source': 'CommunityDragon'}
+    return {'primary': primary, 'secondary': secondary, 'shards': shards, 'primary_icon': rune_icon(primary, data), 'secondary_icon': rune_icon(secondary, data), 'source': 'CommunityDragon'}
 
 
 def champion_build(champion_key, role, opponent_key, data):
