@@ -3,7 +3,7 @@ import json
 import os
 
 from analysis import analyze_matches
-from build_data import load_build_data
+from resilient_data import load_build_data
 from duel_ui import prepare_duels, attach_duels
 from riot_api import get_puuid, get_ranked_match_ids, get_match, get_timeline
 
@@ -41,7 +41,7 @@ def main():
     os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
     with open(output_path, 'w', encoding='utf-8') as handle:
         handle.write(html)
-    print(json.dumps({'duels': len(builds), 'primary_rune_counts': [len(b['runes'].get('primary_runes', [])) for b in builds]}))
+    print(json.dumps({'champions': len(builds), 'rune_recommendations_available': bool(build_data['rune_recommendations'])}))
 
 
 if __name__ == '__main__':
