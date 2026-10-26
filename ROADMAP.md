@@ -4,27 +4,37 @@ Objectif : transformer le site en vrai coach. Cycle visé : repérer une difficu
 
 Règle de travail : une fonctionnalité n’est « terminée » que lorsqu’elle a été testée sur des données réelles et vérifiée sur le site déployé (workflow vert ≠ fonctionnalité validée).
 
-## État actuel
+Légende : [x] vérifié sur le site déployé ou dans les logs · [ ] à faire ou à vérifier.
 
-- Bilan, Plan, Matchups, Timeline, Parties : présents, à revalider.
-- Build : sélection champion + rôle puis versus facultatif ; runes CommunityDragon à vérifier ; objets et compétences indisponibles ; aucune adaptation au versus vérifiée.
-- Données CommunityDragon : accès parfois en erreur (403, délai TLS) ; le site continue sans runes en cas d’échec.
+## État actuel (26/10/2026)
+
+- Bilan, Matchups, Timeline, Parties : présents, à revalider.
+- Plan : refondu (étape 2), en attente de vérification sur le site.
+- Build : sélection champion + rôle puis versus facultatif. Dernière génération confirmée dans les logs : 173 champions sur 173 avec une page de runes valide (282 combinaisons champion/rôle). L’affichage des runes sur le site n’est pas encore confirmé visuellement. Objets et compétences indisponibles ; aucune adaptation au versus.
+- CommunityDragon : accès parfois en erreur auparavant (403, délai TLS) ; le site continue sans runes en cas d’échec et l’indique dans « État des données ».
 
 ## Étape 1 — Fiabiliser le site et le Build
 
-- [ ] Afficher la date de génération et l’état de chaque source (Riot, Data Dragon, CommunityDragon).
-- [ ] Valider les runes sur plusieurs champions et rôles réels ; vérifier 4 runes principales + 2 secondaires.
-- [ ] Traduire les shards en noms lisibles.
-- [ ] Intégrer une source fiable pour objets et ordre des compétences, sinon afficher « indisponible ».
-- [ ] Ne présenter une adaptation au versus que si elle est sourcée.
-- [ ] Ajouter des tests automatiques sur le parsing des données externes.
+- [ ] Afficher la date de génération et l’état de chaque source : fait et confirmé sur le site pour Data Dragon et CommunityDragon ; la source Riot n’est pas encore affichée.
+- [ ] Valider les runes sur plusieurs champions et rôles réels : couverture 173/173 confirmée dans les logs ; reste à voir 4 runes principales + 2 secondaires à l’écran sur plusieurs champions (dont Yone en Mid).
+- [ ] Traduire les shards en noms lisibles : implémenté, affichage non confirmé.
+- [ ] Intégrer une source fiable pour objets et ordre des compétences, sinon afficher « indisponible » (actuellement : indisponible).
+- [ ] Ne présenter une adaptation au versus que si elle est sourcée (actuellement : aucune adaptation affichée).
+- [x] Ajouter des tests automatiques sur le parsing des données externes : exécutés avant chaque génération (runes, interface Build, plan de progression).
 
 ## Étape 2 — Plan de progression suivi
 
-- [ ] Une priorité, une preuve, un exercice, un indicateur mesurable.
-- [ ] Bilan par priorité : en progrès, stable, données insuffisantes.
-- [ ] Afficher le nombre de parties derrière chaque constat.
-- [ ] Conserver l’historique des objectifs (stockage persistant à définir).
+- [ ] Une priorité, une preuve, un exercice, un indicateur mesurable : implémenté (refonte), à vérifier sur le site.
+- [ ] Bilan par priorité : en progrès, stable, données insuffisantes : implémenté, à vérifier sur le site.
+- [ ] Afficher le nombre de parties derrière chaque constat : implémenté, à vérifier sur le site.
+- [ ] Conserver l’historique des objectifs : non commencé, stockage persistant à décider.
+
+Notes de conception :
+
+- La tendance compare le nombre de parties concernées sur les N parties les plus récentes et les N précédentes (N = la moitié des parties analysées, soit 10 avec 20 parties). Il faut au moins 5 parties par période, sinon « données insuffisantes ». Un écart de 20 points déclenche « en progrès » ou « en régression ». Ces seuils sont indicatifs, pas des tests statistiques.
+- Deux défauts de l’ancienne version sont corrigés : la tendance n’était calculée que sur les parties déjà problématiques (une amélioration complète n’était pas détectée), et l’écran annonçait « 20 parties » par période alors que 20 parties seulement sont analysées au total.
+- L’ancienne fonction progression_plan() d’analysis.py n’alimente plus l’onglet Plan ; à supprimer après validation.
+- Le suivi fonctionne sans stockage : les périodes glissent à chaque génération. Un historique persistant des objectifs nécessite un stockage.
 
 ## Étape 3 — Débrief de partie et passages à revoir
 

@@ -5,6 +5,7 @@ import os
 from analysis import analyze_matches
 from resilient_data import load_build_data
 from duel_ui import prepare_duels, attach_duels
+from progress import build_progress, attach_plan
 from riot_api import get_puuid, get_ranked_match_ids, get_match, get_timeline
 
 
@@ -36,12 +37,16 @@ def main():
     build_data = load_build_data()
     builds = prepare_duels(analysis['games'], build_data)
     analysis['build'] = builds[0] if builds else {}
-    html = attach_duels(build_html(riot_id, analysis), builds, build_data)
+    progress = build_progress(analysis['games'])
+    html = build_html(riot_id, analysis)
+    html = attach_plan(html, progress)
+    html = attach_duels(html, builds, build_data)
     output_path = os.environ.get('OUTPUT_PATH', 'site/index.html')
     os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
     with open(output_path, 'w', encoding='utf-8') as handle:
         handle.write(html)
-    print(json.dumps({'champions': len(builds), 'diagnostics': build_data.get('diagnostics'), 'sources': build_data.get('sources')}, ensure_ascii=False))
+    top = progress['priority']
+    print(json.dumps({'champions': len(builds), 'diagnostics': build_data.get('diagnostics'), 'sources': build_data.get('sources'), 'plan': {'games': progress['games'], 'priority': top['key'] if top else None, 'trend': top['trend'] if top else None}}, ensure_ascii=False))
 
 
 if __name__ == '__main__':
