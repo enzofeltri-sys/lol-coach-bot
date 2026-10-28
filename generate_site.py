@@ -6,6 +6,7 @@ from analysis import analyze_matches
 from resilient_data import load_build_data
 from duel_ui import prepare_duels, attach_duels
 from progress import build_progress, attach_plan
+from debrief import attach_debriefs
 from riot_api import get_puuid, get_ranked_match_ids, get_match, get_timeline
 
 
@@ -40,6 +41,7 @@ def main():
     progress = build_progress(analysis['games'])
     html = build_html(riot_id, analysis)
     html = attach_plan(html, progress)
+    html = attach_debriefs(html, analysis['games'])
     html = attach_duels(html, builds, build_data)
     output_path = os.environ.get('OUTPUT_PATH', 'site/index.html')
     os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
