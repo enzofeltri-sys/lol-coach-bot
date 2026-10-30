@@ -4,13 +4,14 @@ Objectif : transformer le site en vrai coach. Cycle visé : repérer une difficu
 
 Règle de travail : une fonctionnalité n’est « terminée » que lorsqu’elle a été testée sur des données réelles et vérifiée sur le site déployé (workflow vert ≠ fonctionnalité validée).
 
-Légende : [x] vérifié sur le site déployé ou dans les logs · [ ] à faire ou à vérifier.
+Légende : [x] vérifié sur le site déployé ou dans les logs (ou décision prise) · [ ] à faire ou à vérifier.
 
-## État actuel (27/10/2026)
+## État actuel (30/10/2026)
 
 - Bilan, Matchups, Timeline, Parties : présents, à revalider.
 - Plan : refondu (étape 2), en attente de vérification sur le site.
 - Parties : débrief ajouté dans chaque carte (étape 3), en attente de vérification sur le site.
+- Notes, retour de partie et séance : ajoutés (étape 4), stockage dans le navigateur, en attente de vérification sur le site.
 - Build : sélection champion + rôle puis versus facultatif. Dernière génération confirmée dans les logs : 173 champions sur 173 avec une page de runes valide (282 combinaisons champion/rôle). L’affichage des runes sur le site n’est pas encore confirmé visuellement. Objets et compétences indisponibles ; aucune adaptation au versus.
 - CommunityDragon : accès parfois en erreur auparavant (403, délai TLS) ; le site continue sans runes en cas d’échec et l’indique dans « État des données ».
 
@@ -21,28 +22,28 @@ Légende : [x] vérifié sur le site déployé ou dans les logs · [ ] à faire 
 - [ ] Traduire les shards en noms lisibles : implémenté, affichage non confirmé.
 - [ ] Intégrer une source fiable pour objets et ordre des compétences, sinon afficher « indisponible » (actuellement : indisponible).
 - [ ] Ne présenter une adaptation au versus que si elle est sourcée (actuellement : aucune adaptation affichée).
-- [x] Ajouter des tests automatiques sur le parsing des données externes : exécutés avant chaque génération (runes, interface Build, plan de progression, débriefs).
+- [x] Ajouter des tests automatiques sur le parsing des données externes : exécutés avant chaque génération (runes, interface Build, plan de progression, débriefs, notes).
 
 ## Étape 2 — Plan de progression suivi
 
 - [ ] Une priorité, une preuve, un exercice, un indicateur mesurable : implémenté (refonte), à vérifier sur le site.
 - [ ] Bilan par priorité : en progrès, stable, données insuffisantes : implémenté, à vérifier sur le site.
 - [ ] Afficher le nombre de parties derrière chaque constat : implémenté, à vérifier sur le site.
-- [ ] Conserver l’historique des objectifs : non commencé, stockage persistant à décider.
+- [ ] Conserver l’historique des objectifs : l’historique des séances est conservé dans le navigateur (étape 4) ; l’historique des priorités du Plan n’est pas conservé.
 
 Notes de conception :
 
 - La tendance compare le nombre de parties concernées sur les N parties les plus récentes et les N précédentes (N = la moitié des parties analysées, soit 10 avec 20 parties). Il faut au moins 5 parties par période, sinon « données insuffisantes ». Un écart de 20 points déclenche « en progrès » ou « en régression ». Ces seuils sont indicatifs, pas des tests statistiques.
 - Deux défauts de l’ancienne version sont corrigés : la tendance n’était calculée que sur les parties déjà problématiques (une amélioration complète n’était pas détectée), et l’écran annonçait « 20 parties » par période alors que 20 parties seulement sont analysées au total.
 - L’ancienne fonction progression_plan() d’analysis.py n’alimente plus l’onglet Plan ; à supprimer après validation.
-- Le suivi fonctionne sans stockage : les périodes glissent à chaque génération. Un historique persistant des objectifs nécessite un stockage.
+- Le suivi du Plan fonctionne sans stockage : les périodes glissent à chaque génération.
 
 ## Étape 3 — Débrief de partie et passages à revoir
 
 - [ ] Débrief : points forts, point principal à revoir, action pour la partie suivante : implémenté dans chaque carte de l’onglet Parties, à vérifier sur le site.
 - [ ] 2 à 3 passages à revoir par partie avec minute et question à se poser : implémenté pour la première mort avant 14 min, le premier repère en désavantage et l’avance à 10 min non convertie (jusqu’à 3 passages). Le passage « vision avant objectif » n’est pas inclus.
 - [ ] Séparer faits, données de match et hypothèses ; gérer les timelines indisponibles : implémenté (faits, questions, mention explicite sans timeline), à vérifier sur le site.
-- [ ] Vérifier la détection des objectifs dans analysis.py : elle cherche des événements DRAGON_KILL, RIFTHERALD_KILL et BARON_NASHOR_KILL ; d’après une bibliothèque cliente, les timelines match-v5 utilisent plutôt ELITE_MONSTER_KILL. À confirmer sur une vraie timeline avant de s’appuyer sur la vision avant objectif.
+- [ ] Vérifier la détection des objectifs dans analysis.py : elle cherche des événements DRAGON_KILL, RIFTHERALD_KILL et BARON_NASHOR_KILL ; un historique des changements de match-v5 liste ELITE_MONSTER_KILL pour les timelines. À confirmer sur une vraie timeline avant de s’appuyer sur la vision avant objectif.
 
 Notes de conception :
 
@@ -51,10 +52,19 @@ Notes de conception :
 
 ## Étape 4 — Notes, objectifs et séances
 
-- [ ] Notes personnelles par champion adverse.
-- [ ] Mini-débrief facultatif après partie (problème, décision regrettée, objectif travaillé).
-- [ ] Objectif de session et bilan de séance.
-- [ ] Décider du stockage des données personnelles (local, GitHub privé, service dédié).
+- [ ] Notes personnelles par champion adverse : implémenté (onglet Build, « Contre qui ? »), testé dans Chromium, à vérifier sur iPhone.
+- [ ] Mini-débrief facultatif après partie (problème, décision regrettée, objectif travaillé) : implémenté dans chaque carte de partie, testé dans Chromium, à vérifier sur iPhone.
+- [ ] Objectif de session et bilan de séance : implémenté dans l’onglet Plan (objectif, clôture avec bilan, historique), testé dans Chromium, à vérifier sur iPhone.
+- [x] Décider du stockage des données personnelles : décision du 30/10/2026, option 1 = stockage dans le navigateur (localStorage) avec export/import JSON.
+
+Notes de conception :
+
+- Clé de stockage : lolcoach.notes.v1. Rien n’est envoyé ni publié. Les notes restent sur l’appareil et ne se synchronisent pas entre téléphone et ordinateur.
+- Safari peut effacer le stockage d’un site après 7 jours d’utilisation de Safari sans interaction avec lui ; les web apps ajoutées à l’écran d’accueil sont exemptées. À vérifier sur l’iPhone concerné. Exporter régulièrement.
+- GitHub Pages est public par défaut, même avec un dépôt privé : ne jamais écrire de notes dans les fichiers générés. Le site publie déjà le Riot ID et les statistiques des parties.
+- L’import remplace toutes les notes après confirmation et nettoie le fichier (types, longueurs, clés interdites).
+- Les tests navigateur (39 contrôles) ont été exécutés dans Chromium hors du dépôt : ils ne tournent pas dans le workflow et ne couvrent pas Safari.
+- Les parties ne sont pas horodatées dans l’analyse : le bilan de séance ne compte donc pas automatiquement les parties jouées. À ajouter si utile.
 
 ## Étape 5 — Préparation avant partie et analyse du lobby
 
